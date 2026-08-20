@@ -1,0 +1,61 @@
+# tsc-p upstream watch: once a week, checks whether upstream has published
+# a stable TypeScript release tag newer than the one pinned in the manifest,
+# and opens a tracking issue if so. It never merges or publishes anything;
+# the sync itself follows tsc-p/docs/UPSTREAM-SYNC.md.
+
+name: tsc-p upstream watch
+
+on:
+  schedule:
+    - cron: "0 20 * * 0" # weekly, Sunday 20:00 UTC (Monday morning AEST)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: dev
+
+      - name: Compare the latest upstream stable tag with the manifest
+        id: compare
+        run: |
+          latest=$(git ls-remote --tags https://github.com/microsoft/TypeScript 'refs/tags/v*' \
+            | awk -F'refs/tags/v' '{print $2}' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1)
+          pinned=$(node -p 'require("./tsc-p/manifest.json").typescriptVersion')
+          echo "latest upstream stable: $latest; pinned: $pinned"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ -n "$latest" ] && [ "$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | tail -1)" != "$pinned" ]; then
+            echo "newer=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "newer=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open a tracking issue for the new upstream release
+        if: steps.compare.outputs.newer == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Upstream TypeScript ${{ steps.compare.outputs.latest }} released"
+          existing=$(gh issue list --label upstream-release --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "issue #$existing already tracks this release"
+            exit 0
+          fi
+          gh issue create --title "$title" --label upstream-release --body "Upstream has tagged v${{ steps.compare.outputs.latest }} on microsoft/TypeScript, newer than the pinned version in tsc-p/manifest.json.
+
+          Follow the sync procedure in tsc-p/docs/UPSTREAM-SYNC.md:
+          1. Merge the new stable tag into a sync branch from dev.
+          2. Review upstream packaging changes (packages/typescript, Herebyfile.mjs, tsc/go.mod).
+          3. Run all test suites and the byte-parity check.
+          4. Update tsc-p/manifest.json: typescriptVersion, upstream.tag (now resolvable — set it to this tag, no longer null), upstream.commit, goVersion, and version. Per the versioning policy in manifest.json's own \$comment, a real upstream.tag means .version may now be a stable X.Y.Z (drop any prerelease suffix if the current version carries one).
+          5. Open a pull request, then release via a protected v-tag.
+
+          The nightly canary's recent runs indicate how much merge friction to expect."

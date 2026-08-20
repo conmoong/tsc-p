@@ -17,6 +17,7 @@ import (
 	"github.com/microsoft/TypeScript/tsc/internal/transformers/jsxtransforms"
 	"github.com/microsoft/TypeScript/tsc/internal/transformers/moduletransforms"
 	"github.com/microsoft/TypeScript/tsc/internal/transformers/tstransforms"
+	"github.com/microsoft/TypeScript/tsc/internal/tscp/hooks"
 	"github.com/microsoft/TypeScript/tsc/internal/tsoptions"
 	"github.com/microsoft/TypeScript/tsc/internal/tspath"
 )
@@ -72,6 +73,15 @@ func (e *emitter) runScriptTransformers(emitContext *printer.EmitContext, source
 	for _, transformer := range getScriptTransformers(emitContext, e.host, sourceFile) {
 		sourceFile = transformer.TransformSourceFile(sourceFile)
 	}
+	// tsc-p modification: drain build-failing diagnostics recorded by plugin
+	// transformers for this file into the emit result.
+	for _, plugin := range hooks.PluginsFromHost(e.host) {
+		if provider, ok := plugin.(hooks.FileDiagnosticsProvider); ok {
+			for _, diagnostic := range provider.TakeDiagnostics(sourceFile.Path()) {
+				e.emitterDiagnostics.Add(diagnostic)
+			}
+		}
+	}
 	return sourceFile
 }
 
@@ -83,6 +93,19 @@ func (e *emitter) runDeclarationTransformers(emitContext *printer.EmitContext, s
 	for _, transformer := range e.getDeclarationTransformers(emitContext, sourceFile, declarationFilePath, declarationMapPath) {
 		sourceFile = transformer.TransformSourceFile(sourceFile)
 		diags = append(diags, transformer.GetDiagnostics()...)
+	}
+	// tsc-p modification: emit-plugin hook point. Plugin transformers run
+	// after the declaration transformer has constructed the declaration AST
+	// and before the declaration printer writes the file.
+	for _, plugin := range hooks.PluginsFromHost(e.host) {
+		if pluginTransformer := plugin.DeclarationTransformer(emitContext, e.host); pluginTransformer != nil {
+			sourceFile = pluginTransformer.TransformSourceFile(sourceFile)
+		}
+		// tsc-p modification: drain build-failing plugin diagnostics for
+		// this file into the declaration transform's diagnostics.
+		if provider, ok := plugin.(hooks.FileDiagnosticsProvider); ok {
+			diags = append(diags, provider.TakeDiagnostics(sourceFile.Path())...)
+		}
 	}
 	return sourceFile, diags
 }
@@ -167,6 +190,15 @@ func getScriptTransformers(emitContext *printer.EmitContext, host printer.EmitHo
 	}
 
 	tx = append(tx, estransforms.NewUseStrictTransformer(&opts))
+
+	// tsc-p modification: emit-plugin hook point. Plugin transformers run
+	// after import elision and before module lowering so one rewrite flows
+	// into both ESM and CommonJS output.
+	for _, plugin := range hooks.PluginsFromHost(host) {
+		if pluginTransformer := plugin.ScriptTransformer(emitContext, host); pluginTransformer != nil {
+			tx = append(tx, pluginTransformer)
+		}
+	}
 
 	// transform module syntax
 	tx = append(tx, getModuleTransformer(&opts))

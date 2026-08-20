@@ -1,0 +1,121 @@
+# tsc-p nightly canary: merges the tsc-p patch (branch `dev`) onto the
+# latest upstream main, builds, tests, and byte-compares emit output against
+# a pristine upstream build. On success the result is force-pushed to the
+# disposable `nightly` branch and nightly binaries are uploaded as workflow
+# artefacts. On any failure a single tracking issue is created or updated.
+#
+# Nothing is ever merged into dev and nothing is published to npm; this is
+# an early-warning system so that stable-tag syncs hold no surprises.
+
+name: tsc-p nightly canary
+
+on:
+  schedule:
+    - cron: "30 14 * * *" # ~00:30 AEST
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # force-push the nightly branch
+  issues: write # maintain the canary tracking issue
+
+concurrency:
+  group: tsc-p-nightly
+  cancel-in-progress: true
+
+jobs:
+  canary:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Merge dev onto latest upstream main
+        id: merge
+        run: |
+          git config user.name "tsc-p nightly canary"
+          git config user.email "nightly-canary@users.noreply.github.com"
+          git config merge.ours.driver true
+          git remote add upstream https://github.com/microsoft/TypeScript
+          git fetch upstream main
+          git checkout -b nightly-canary
+          echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+          if ! git merge --no-edit upstream/main; then
+            echo "conflicts<<EOF" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "merge_failed=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tsc/go.mod
+          cache: true
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Build and test the merged tree
+        run: |
+          go -C tsc build ./cmd/tsc
+          go -C tsc test ./internal/tscp/... ./internal/compiler/
+
+      - name: Launcher tests
+        run: |
+          npm ci --no-audit --no-fund --prefix tsc-p
+          npm test --prefix tsc-p
+
+      - name: Byte-parity against pristine upstream main
+        run: |
+          # Patched binary from the merged tree.
+          CGO_ENABLED=0 go -C tsc build -trimpath -ldflags="-s -w" -o /tmp/tscp-merged ./cmd/tsc
+          # Pristine binary from upstream main, built in a worktree.
+          git worktree add /tmp/upstream-src upstream/main
+          (cd /tmp/upstream-src/tsc && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/tscp-pristine ./cmd/tsc)
+          npm run tscp:test:bin -- --exe /tmp/tscp-merged --project /tmp/proj-merged
+          npm run tscp:test:bin -- --exe /tmp/tscp-pristine --project /tmp/proj-pristine
+          diff -r /tmp/proj-merged/dist /tmp/proj-pristine/dist
+          echo "emit output is byte-identical to pristine upstream main"
+
+      - name: Cross-compile all targets for the nightly artefact
+        run: npm run tscp:build
+
+      - name: Upload nightly binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tsc-p-nightly-${{ steps.merge.outputs.upstream_sha }}
+          path: built/tscp/bin/
+          retention-days: 7
+
+      - name: Update the nightly branch
+        run: git push --force origin nightly-canary:nightly
+
+      - name: Close a previously open canary issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "Nightly canary is green again against upstream $(git rev-parse --short upstream/main): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+
+      - name: Report failure in the canary tracking issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Nightly canary failure against upstream main"
+          body="The nightly canary failed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Upstream commit: ${{ steps.merge.outputs.upstream_sha }}
+          Merge conflicts (if any):
+          ${{ steps.merge.outputs.conflicts }}"
+          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --label nightly-canary --body "$body"
+          fi

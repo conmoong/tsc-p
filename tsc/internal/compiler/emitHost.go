@@ -11,6 +11,8 @@ import (
 	"github.com/microsoft/TypeScript/tsc/internal/printer"
 	"github.com/microsoft/TypeScript/tsc/internal/symlinks"
 	"github.com/microsoft/TypeScript/tsc/internal/transformers/declarations"
+	tscpdefaults "github.com/microsoft/TypeScript/tsc/internal/tscp/defaults"
+	"github.com/microsoft/TypeScript/tsc/internal/tscp/hooks"
 	"github.com/microsoft/TypeScript/tsc/internal/tsoptions"
 	"github.com/microsoft/TypeScript/tsc/internal/tspath"
 )
@@ -131,6 +133,34 @@ func (host *emitHost) WriteFile(fileName string, text string) error {
 
 func (host *emitHost) GetEmitResolver() printer.EmitResolver {
 	return host.emitResolver
+}
+
+// TSCPEmitPlugins is a tsc-p modification: it forwards optional emit
+// plugins from the program's compiler host to the emit pipeline (see
+// internal/tscp/hooks). When the compiler host provides none (including
+// every upstream host), plugins configured in the project's tsconfig
+// (compilerOptions.plugins) apply; with nothing configured there either,
+// emit behaves exactly as upstream.
+func (host *emitHost) TSCPEmitPlugins() []hooks.EmitPlugin {
+	if plugins := hooks.PluginsFromHost(host.program.Host()); plugins != nil {
+		return plugins
+	}
+	commandLine := host.program.CommandLine()
+	configDir := host.program.GetCurrentDirectory()
+	configPath := ""
+	if commandLine.ConfigFile != nil {
+		configPath = commandLine.ConfigFile.SourceFile.FileName()
+		configDir = tspath.GetDirectoryPath(configPath)
+	}
+	return tscpdefaults.EmitPlugins(commandLine.Raw, configDir, configPath)
+}
+
+// GetResolvedModule is a tsc-p modification: it forwards the program's
+// resolution-cache lookup by specifier text and mode, used by emit plugins
+// for synthesised nodes whose parent chains cannot support the usual
+// per-usage mode computation.
+func (host *emitHost) GetResolvedModule(file ast.HasFileName, moduleReference string, mode core.ResolutionMode) *module.ResolvedModule {
+	return host.program.GetResolvedModule(file, moduleReference, mode)
 }
 
 func (host *emitHost) IsSourceFileFromExternalLibrary(file *ast.SourceFile) bool {

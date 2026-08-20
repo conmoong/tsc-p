@@ -2,3 +2,17 @@
 **/*.json linguist-language=jsonc
 * -text
 *.go text eol=lf
+
+# tsc-p: always keep the fork README when merging upstream
+# (one-time per clone: git config merge.ours.driver true)
+README.md merge=ours
+
+# tsc-p: Herebyfile.mjs's release-profile pin (nativePreviewReleaseVersion,
+# produceNativePreviewVsix, produceTypeScriptNightlyVsix) permanently
+# diverges from whatever upstream main is currently prepping (e.g. the next
+# release's nightly builds) — that's expected, not a real conflict to
+# resolve. Keeping dev's version avoids the nightly canary tripping on this
+# every single night while it still merges everything else from upstream
+# normally. A real, deliberate stable-tag re-pin is done by hand without
+# this driver configured, so it still sees and resolves this properly.
+Herebyfile.mjs merge=ours
