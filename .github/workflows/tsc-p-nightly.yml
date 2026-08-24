@@ -1,0 +1,163 @@
+# tsc-p nightly canary: merges the tsc-p patch (branch `dev`) onto the
+# latest upstream main, builds, tests, and byte-compares emit output against
+# a pristine upstream build. Nightly binaries are uploaded as workflow
+# artefacts. On any failure a single tracking issue is created or updated.
+#
+# When the merge is clean it also opens (or updates) a pull request bringing
+# upstream main into `dev`, so keeping the fork current is one click rather
+# than a chore. The merge is performed HERE, not by GitHub: `.gitattributes`
+# resolves README.md and Herebyfile.mjs with `merge=ours`, which is a custom
+# driver requiring `git config merge.ours.driver true` — GitHub's merge button
+# has no such config and would conflict on those files every single time. By
+# pushing an already-merged branch, the PR is a fast-forward and merges cleanly.
+#
+# Nothing is ever pushed to dev directly and nothing is published to npm; this
+# is an early-warning system, plus a low-friction way to accept upstream.
+
+name: tsc-p nightly canary
+
+on:
+  schedule:
+    - cron: "30 14 * * *" # ~00:30 AEST
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # push the upstream-sync branch
+  issues: write # maintain the canary tracking issue
+  pull-requests: write # open/update the upstream-sync PR
+
+concurrency:
+  group: tsc-p-nightly
+  cancel-in-progress: true
+
+jobs:
+  canary:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Merge dev onto latest upstream main
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config merge.ours.driver true
+          git remote add upstream https://github.com/microsoft/TypeScript
+          git fetch upstream main
+          git checkout -b nightly-canary
+          echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+          # Once a sync PR has been merged, dev already contains upstream main
+          # until upstream moves again. The canary still builds and byte-compares
+          # (that is its real job), but there is nothing to open a PR about --
+          # and `gh pr create` errors outright on an empty diff.
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "already_current=true" >> "$GITHUB_OUTPUT"
+            echo "dev already contains upstream main; no sync PR needed"
+          fi
+          if ! git merge --no-edit upstream/main; then
+            echo "conflicts<<EOF" >> "$GITHUB_OUTPUT"
+            git diff --name-only --diff-filter=U >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "merge_failed=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tsc/go.mod
+          cache: true
+          cache-dependency-path: tsc/go.sum
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Build and test the merged tree
+        run: |
+          go -C tsc build ./cmd/tsc
+          go -C tsc test ./internal/tscp/... ./internal/compiler/
+
+      - name: Launcher tests
+        run: |
+          npm ci --no-audit --no-fund --prefix tsc-p
+          npm test --prefix tsc-p
+
+      - name: Byte-parity against pristine upstream main
+        run: |
+          # Patched binary from the merged tree.
+          CGO_ENABLED=0 go -C tsc build -trimpath -ldflags="-s -w" -o /tmp/tscp-merged ./cmd/tsc
+          # Pristine binary from upstream main, built in a worktree.
+          git worktree add /tmp/upstream-src upstream/main
+          (cd /tmp/upstream-src/tsc && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/tscp-pristine ./cmd/tsc)
+          npm run tscp:test:bin -- --exe /tmp/tscp-merged --project /tmp/proj-merged
+          npm run tscp:test:bin -- --exe /tmp/tscp-pristine --project /tmp/proj-pristine
+          diff -r /tmp/proj-merged/dist /tmp/proj-pristine/dist
+          echo "emit output is byte-identical to pristine upstream main"
+
+      - name: Cross-compile all targets for the nightly artefact
+        run: npm run tscp:build
+
+      - name: Upload nightly binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tsc-p-nightly-${{ steps.merge.outputs.upstream_sha }}
+          path: built/tscp/bin/
+          retention-days: 7
+
+      # The merge already succeeded above (with merge.ours.driver configured),
+      # so this branch is dev+upstream already resolved. The resulting PR is a
+      # fast-forward, which is the only way "click merge" can work: GitHub
+      # cannot run the merge=ours driver itself.
+      - name: Open or update the upstream sync PR
+        if: steps.merge.outputs.already_current != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push --force origin nightly-canary:sync/upstream-main
+          if gh pr list --head sync/upstream-main --base dev --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "sync PR already open; branch updated in place"
+            exit 0
+          fi
+          gh pr create \
+            --head sync/upstream-main \
+            --base dev \
+            --title "Merge upstream main into dev" \
+            --body "Automated by the nightly canary. Upstream \`main\` merged into \`dev\` and verified: all suites pass and emit output is byte-identical to a pristine upstream build.
+
+          Upstream commit: ${{ steps.merge.outputs.upstream_sha }}
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          The merge was performed in CI with \`merge.ours.driver\` configured, so the
+          \`.gitattributes\` rules for README.md and Herebyfile.mjs are already applied
+          and this should merge as a fast-forward. Rebuilt nightly against the newest
+          upstream commit; safe to merge or ignore."
+
+      - name: Close a previously open canary issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "Nightly canary is green again against upstream $(git rev-parse --short upstream/main): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+
+      - name: Report failure in the canary tracking issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Nightly canary failure against upstream main"
+          body="The nightly canary failed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Upstream commit: ${{ steps.merge.outputs.upstream_sha }}
+          Merge conflicts (if any):
+          ${{ steps.merge.outputs.conflicts }}"
+          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --label nightly-canary --body "$body"
+          fi

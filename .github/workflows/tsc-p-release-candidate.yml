@@ -1,0 +1,156 @@
+# tsc-p release candidate: keeps `release-candidate` up to date as
+# upstream's stable release line + the tsc-p patch.
+#
+# The branch is a DERIVED artifact, rebuilt from scratch on every run by
+# tsc-p/scripts/portPatch.mjs — never commit to it directly, fixes belong in
+# `dev` (or in tsc-p/patches/<lane>/ for a change that only applies to this
+# lane). Nothing is published here; cutting an actual release is a manual
+# decision, made by pushing a v* tag once the candidate looks right.
+#
+# Regenerates only when an input actually moved. The previous run's inputs are
+# recorded as trailers in the branch's own commit message, so there is no
+# external state to keep or lose, and `git log -1 release-candidate` always
+# says exactly what that candidate was built from.
+
+name: tsc-p release candidate
+
+on:
+  schedule:
+    - cron: "0 16 * * *" # daily, ~02:00 AEST (after the nightly canary)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Regenerate even if neither input moved"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # push the release-candidate branch
+  issues: write # report a port that no longer applies
+
+concurrency:
+  group: tsc-p-release-candidate
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_LANE: ts7-release
+
+jobs:
+  port:
+    name: Port the tsc-p patch onto the upstream release lane
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.inputs.outputs.changed }}
+      conflicted: ${{ steps.port.outputs.conflicted }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Fetch upstream and the current candidate
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/microsoft/TypeScript
+          git fetch --no-tags upstream "$UPSTREAM_LANE:refs/remotes/upstream/$UPSTREAM_LANE"
+          git fetch --no-tags upstream main:refs/remotes/upstream/main
+          git fetch --no-tags origin "release-candidate:refs/remotes/origin/release-candidate" || true
+
+      # The previous candidate records its inputs as commit trailers. If both
+      # still match, nothing can have changed and the whole job is a no-op.
+      - name: Decide whether anything moved
+        id: inputs
+        run: |
+          cur_up="$(git rev-parse "upstream/$UPSTREAM_LANE")"
+          cur_dev="$(git rev-parse HEAD)"
+          prev_msg="$(git log -1 --format=%B origin/release-candidate 2>/dev/null || true)"
+          prev_up="$(printf '%s\n' "$prev_msg" | sed -n 's/^Upstream-Sha: *//p')"
+          prev_dev="$(printf '%s\n' "$prev_msg" | sed -n 's/^Dev-Sha: *//p')"
+          echo "upstream/$UPSTREAM_LANE: ${prev_up:-<none>} -> $cur_up"
+          echo "dev:                     ${prev_dev:-<none>} -> $cur_dev"
+          if [ "$prev_up" = "$cur_up" ] && [ "$prev_dev" = "$cur_dev" ] && [ "${{ github.event.inputs.force }}" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "inputs unchanged; nothing to do"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Port the patch onto the release lane
+        id: port
+        if: steps.inputs.outputs.changed == 'true'
+        run: |
+          set +e
+          npm run tscp:port -- --onto "upstream/$UPSTREAM_LANE" --from dev --branch release-candidate
+          status=$?
+          set -e
+          # Exit 2 means the candidate was built but has conflict markers: still
+          # worth pushing so it can be inspected, but it must not look healthy.
+          if [ "$status" = "2" ]; then
+            echo "conflicted=true" >> "$GITHUB_OUTPUT"
+          elif [ "$status" != "0" ]; then
+            exit "$status"
+          else
+            echo "conflicted=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.inputs.outputs.changed == 'true' && steps.port.outputs.conflicted == 'false'
+        with:
+          go-version-file: tsc/go.mod
+          cache: true
+          cache-dependency-path: tsc/go.sum
+
+      - name: Verify the candidate really builds and passes
+        if: steps.inputs.outputs.changed == 'true' && steps.port.outputs.conflicted == 'false'
+        run: |
+          npm run tscp:check:policy
+          npm run tscp:test:go
+          npm run tscp:test:launcher
+
+      # Pushed whether or not it is healthy: a broken candidate is exactly the
+      # thing worth seeing early, and the branch is disposable either way.
+      - name: Publish the candidate branch
+        if: steps.inputs.outputs.changed == 'true'
+        run: git push --force origin release-candidate
+
+      - name: Report a port that no longer applies
+        if: failure() || steps.port.outputs.conflicted == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Release candidate port failing against upstream $UPSTREAM_LANE"
+          body="Porting the tsc-p patch onto upstream/$UPSTREAM_LANE stopped working.
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Upstream $UPSTREAM_LANE: $(git rev-parse --short "upstream/$UPSTREAM_LANE" 2>/dev/null || echo unknown)
+          dev: $(git rev-parse --short HEAD)
+
+          Reproduce locally:
+
+              npm run tscp:port -- --onto upstream/$UPSTREAM_LANE --from dev
+
+          Fix in \`dev\`, or add a lane override under \`tsc-p/patches/$UPSTREAM_LANE/\`
+          if the change cannot be expressed as one diff that applies to both
+          upstream lanes. Never fix the candidate branch directly — it is
+          force-rebuilt on the next run."
+          existing=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --label release-candidate --body "$body"
+          fi
+
+      - name: Close the tracking issue once the port is healthy again
+        if: success() && steps.inputs.outputs.changed == 'true' && steps.port.outputs.conflicted == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "Port is clean again: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi

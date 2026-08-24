@@ -1,0 +1,210 @@
+# tsc-p release: triggered by a protected semantic-version tag (vX.Y.Z).
+# Builds the full target matrix once, tests each binary on a native runner,
+# publishes the npm packages via trusted publishing (OIDC), and creates a
+# GitHub Release. Binaries are never rebuilt in the publish job; it works
+# only from downloaded artefacts.
+#
+# workflow_dispatch runs the same pipeline in dry-run mode: everything is
+# built, tested and packed, but nothing is published.
+
+name: tsc-p release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {} # dry-run only; publishing requires a tag
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tsc-p-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate tag and manifest
+    runs-on: ubuntu-24.04
+    outputs:
+      platforms: ${{ steps.platforms.outputs.platforms }}
+      publish: ${{ steps.mode.outputs.publish }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Decide mode
+        id: mode
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "workflow_dispatch run: dry-run only, nothing will be published"
+          fi
+
+      # Everything cheap that can reject the release happens here, before the
+      # build matrix: semver, the tag/version match, the version/upstream-tag
+      # policy in both directions, and whether the version is already on the
+      # registry. A forgotten version bump fails in seconds rather than after
+      # a full cross-compile.
+      - name: Validate the release policy
+        if: steps.mode.outputs.publish == 'true'
+        run: npm run tscp:check:policy -- --tag "$GITHUB_REF_NAME" --check-npm
+
+      # A dry run has no tag to match, but the manifest must still be coherent.
+      - name: Validate the release policy (dry run)
+        if: steps.mode.outputs.publish != 'true'
+        run: npm run tscp:check:policy
+
+      - name: Verify the pinned upstream commit is recorded and is an ancestor
+        run: |
+          commit="$(node -p 'require("./tsc-p/manifest.json").upstream.commit')"
+          ts_version="$(node -p 'require("./tsc-p/manifest.json").typescriptVersion')"
+          echo "manifest: TypeScript $ts_version, upstream commit $commit"
+          if ! git merge-base --is-ancestor "$commit" HEAD; then
+            echo "manifest upstream commit $commit is not an ancestor of this release" >&2
+            exit 1
+          fi
+
+      - name: Read platforms matrix from the manifest
+        id: platforms
+        run: echo "platforms=$(node tsc-p/scripts/readManifest.mjs)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Cross-compile all targets
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tsc/go.mod
+          cache: true
+          cache-dependency-path: tsc/go.sum
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Go test
+        run: npm run tscp:test:go
+
+      - name: Npm test
+        run: npm run tscp:test:launcher
+
+      - name: Build
+        run: npm run tscp:build
+
+      - name: Package
+        run: npm run tscp:package
+
+      - name: Verify package manifests and tarball contents
+        run: npm run tscp:verify-packages
+
+      - name: Upload artifacts for testing and publishing
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tsc-p
+          path: built/tscp
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    name: Test ${{ matrix.platform.name }}
+    needs: [validate, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.validate.outputs.platforms) }}      
+    runs-on: ${{ matrix.platform.ghActionRunner }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tsc-p
+          path: built/tscp
+
+      - name: Executable test
+        run: npm run tscp:test:bin
+
+      - name: Clean-install smoke test
+        run: npm run tscp:test:smoke
+
+  publish:
+    name: Publish npm packages and GitHub Release
+    needs: [validate, test]
+    if: needs.validate.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    environment: npm-publish
+    permissions:
+      contents: write # create the GitHub Release
+      id-token: write # npm trusted publishing (OIDC)
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin the npm CLI (trusted publishing requires npm >= 11.5.1)
+        run: |
+          npm install -g npm@11.16.0
+          npm --version
+
+      - name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tsc-p
+          path: built/tscp
+      
+      - name: npm pack dry-run listing
+        run: |
+          for dir in built/tscp/npm/*/; do
+            (cd "$dir" && npm pack --dry-run)
+          done
+
+      - name: Publish (platform packages first, then clean-room check, then root)
+        run: npm run tscp:publish
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd built/tscp/packages
+          sha256sum *.tgz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release with archives and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "tsc-p $GITHUB_REF_NAME" \
+            --notes "$(node -p '
+              const m = require("./tsc-p/manifest.json");
+              [
+                `tsc-p ${m.version} — unofficial downstream fork of microsoft/TypeScript's tsc/ native compiler.`,
+                ``,
+                `- TypeScript version: ${m.typescriptVersion}`,
+                `- Upstream commit: ${m.upstream.commit}`,
+                `- Targets: ${m.goTargets.map(t => t.name).join(", ")}`,
+                ``,
+                `Install with: npm install --save-dev @conmoong/tsc-p`,
+                `On an unsupported platform, also install: npm install --save-dev @conmoong/tsc-p-wasi`,
+              ].join("\n")
+            ')" \
+            built/tscp/packages/*.tgz \
+            built/tscp/packages/SHA256SUMS.txt

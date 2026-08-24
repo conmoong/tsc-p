@@ -1,0 +1,43 @@
+{
+    "name": "@conmoong/tsc-p-wasi",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Universal WASI fallback for tsc-p: runs the compiler as a WebAssembly module via Node's built-in node:wasi, for any platform not covered by tsc-p's native per-platform packages. Not installed automatically — see the root tsc-p package's README for when and how to add it.",
+    "keywords": [
+        "typescript",
+        "compiler",
+        "wasm",
+        "wasi",
+        "tsc"
+    ],
+    "homepage": "https://github.com/conmoong/tsc-p",
+    "bugs": {
+        "url": "https://github.com/conmoong/tsc-p/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/conmoong/tsc-p.git"
+    },
+    "license": "Apache-2.0",
+    "type": "module",
+    "bin": {
+        "tsc-p-wasi": "./bin/tsc-p-wasi"
+    },
+    "files": [
+        "tsc-p-wasi.wasm",
+        "bin",
+        "lib",
+        "NOTICE.txt"
+    ],
+    "exports": {
+        "./package.json": "./package.json",
+        ".": "./lib/run.mjs"
+    },
+    "preferUnplugged": true,
+    "publishConfig": {
+        "access": "public"
+    },
+    "engines": {
+        "node": ">=20.19"
+    }
+}
