@@ -106,6 +106,8 @@ The only upstream files this fork modifies, ever, are:
 | `tsc/internal/compiler/emitter.go` | Two emit-plugin hook points (marked `tsc-p modification`) |
 | `tsc/internal/compiler/emitHost.go` | Forwards plugins from the compiler host, applies the tsconfig-configured defaults, and exposes a resolution-cache lookup for plugins (marked `tsc-p modification`) |
 | `tsc/internal/core/version.go` | Pins the reported compiler version to the stable release tsc-p tracks, instead of upstream's own dev/prerelease string |
+| `tsc/internal/tsoptions/tsconfigparsing.go` | Inherits `compilerOptions.plugins` across `extends`. Upstream drops it, because `plugins` is the one declared option with no field on `core.CompilerOptions` and so is never merged. **Permanent:** reported upstream and declined — "We don't support plugins. We just ignore that entirely, let alone do any extending." tsc-p reads that array to activate its plugins, so it needs the fix regardless. |
+| `tsc/internal/tsoptions/tsconfigparsing_test.go` | Tests for the above |
 | `package.json` | Adds `tscp:*` scripts (build/package/test/publish, under `tsc-p/scripts/`); every existing script is untouched |
 | `.gitattributes` | Two `merge=ours` lines — `README.md` (the fork readme) and `Herebyfile.mjs` (see below) — so both always keep this fork's version across an upstream merge instead of conflicting |
 | `Herebyfile.mjs` | Pins the native-preview release profile to tsc-p's tracked stable version instead of upstream's own prerelease/nightly profile |

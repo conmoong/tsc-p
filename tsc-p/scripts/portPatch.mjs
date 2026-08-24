@@ -54,7 +54,6 @@ const LANE_EXCLUDES = {
 // Every upstream file tsc-p modifies. Keep in sync with AGENTS.md's table.
 const MODIFIED_UPSTREAM_FILES = [
     ".gitattributes",
-    ".gitignore",
     "Herebyfile.mjs",
     "README.md",
     "package.json",

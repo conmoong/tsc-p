@@ -1175,11 +1175,18 @@ func parseConfig(
 					result.compileOnSave = compileOnSave
 				}
 			}
-			// compilerOptions.plugins has no field on core.CompilerOptions -- it is
-			// carried purely as raw JSON -- so mergeCompilerOptions below never
-			// brings it across `extends` the way it does typed options. Collect it
-			// here so a plugins array declared only in a base config stays visible
-			// to consumers reading ParsedCommandLine.Raw.
+			// tsc-p modification: compilerOptions.plugins has no field on
+			// core.CompilerOptions -- it is carried purely as raw JSON -- so
+			// mergeCompilerOptions below never brings it across `extends` the way
+			// it does typed options. Collect it here so a plugins array declared
+			// only in a base config stays visible to consumers reading
+			// ParsedCommandLine.Raw.
+			//
+			// Permanent, not pending upstream: this was reported and declined --
+			// "We don't support plugins. We just ignore that entirely, let alone
+			// do any extending." That is reasonable upstream, where nothing reads
+			// the array; tsc-p reads it to activate its compiled-in plugins, so
+			// the fork needs it. Do not re-file it.
 			if extendedRawMap, ok := extendsRaw.(*collections.OrderedMap[string, any]); ok {
 				if extendedCompilerOptions, ok := extendedRawMap.GetOrZero("compilerOptions").(*collections.OrderedMap[string, any]); ok {
 					if plugins, ok := extendedCompilerOptions.GetOrZero("plugins").([]any); ok {
