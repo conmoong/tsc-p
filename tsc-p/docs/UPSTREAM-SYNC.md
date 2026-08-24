@@ -94,6 +94,10 @@ Then:
 6. Open a pull request into `dev`; merge when CI is green; release per
    [RELEASING.md](RELEASING.md).
 
+Upstream's API and extensibility direction — and what it means for this fork —
+is tracked separately in
+[UPSTREAM-API-OUTLOOK.md](UPSTREAM-API-OUTLOOK.md).
+
 ## Automation
 
 Three scheduled workflows keep human intervention minimal. None of them

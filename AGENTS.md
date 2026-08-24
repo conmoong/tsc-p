@@ -85,7 +85,10 @@ Full context: [README.md](README.md),
 [tsc/internal/tscp/doc.go](tsc/internal/tscp/doc.go) (plugin architecture),
 [tsc-p/docs/BUILDING.md](tsc-p/docs/BUILDING.md),
 [tsc-p/docs/UPSTREAM-SYNC.md](tsc-p/docs/UPSTREAM-SYNC.md),
-[tsc-p/docs/RELEASING.md](tsc-p/docs/RELEASING.md).
+[tsc-p/docs/RELEASING.md](tsc-p/docs/RELEASING.md),
+[tsc-p/docs/UPSTREAM-API-OUTLOOK.md](tsc-p/docs/UPSTREAM-API-OUTLOOK.md)
+(where upstream's own extensibility story is heading, and how tsc-p sits
+relative to it).
 
 ## The one rule that matters most
 
@@ -113,7 +116,7 @@ docs are `merge=ours`, replaced wholesale, and never conflict.
 | `tsc/internal/tsoptions/tsconfigparsing.go` | Inherits `compilerOptions.plugins` across `extends`. Upstream drops it, because `plugins` is the one declared option with no field on `core.CompilerOptions` and so is never merged. **Permanent:** reported upstream ([#63975](https://github.com/microsoft/TypeScript/issues/63975)) and declined — "We don't support plugins. We just ignore that entirely, let alone do any extending." tsc-p reads that array to activate its plugins, so it needs the fix regardless. |
 | `tsc/internal/tsoptions/tsconfigparsing_test.go` | Tests for the above |
 | `package.json` | Adds `tscp:*` scripts (build/package/test/publish, under `tsc-p/scripts/`); every existing script is untouched |
-| `.gitattributes` | Two `merge=ours` lines — `README.md` (the fork readme) and `Herebyfile.mjs` (see below) — so both always keep this fork's version across an upstream merge instead of conflicting |
+| `.gitattributes` | `merge=ours` rules so the files tsc-p replaces wholesale (`README.md`, the identity docs below) and the `Herebyfile.mjs` release pin always keep this fork's version across an upstream merge instead of conflicting |
 | `Herebyfile.mjs` | Pins the native-preview release profile to tsc-p's tracked stable version instead of upstream's own prerelease/nightly profile |
 **Project-identity docs** — replaced wholesale, all `merge=ours`, so upstream's
 edits to them never reach us and never conflict:
@@ -201,7 +204,10 @@ rather than re-parsing the raw config, and extend them if a new need
 arises rather than duplicating parsing logic in a new plugin.
 
 This is deliberately **not** a generic third-party plugin system: no
-dynamic loading, no config-file plugin references. Plugins are first-party
+dynamic loading, no config-file plugin references. Upstream is building one of
+those (content mappers today, custom transformers planned for 7.1); see
+[tsc-p/docs/UPSTREAM-API-OUTLOOK.md](tsc-p/docs/UPSTREAM-API-OUTLOOK.md) for
+what that changes and what it does not. Plugins are first-party
 Go packages compiled into the binary and wired up explicitly through
 `hooks.Provider`. If asked to add a new capability (e.g. an
 argument-validation injector, a dependency-hygiene checker), read
