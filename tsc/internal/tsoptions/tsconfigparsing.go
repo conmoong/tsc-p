@@ -1182,7 +1182,8 @@ func parseConfig(
 			// only in a base config stays visible to consumers reading
 			// ParsedCommandLine.Raw.
 			//
-			// Permanent, not pending upstream: this was reported and declined --
+			// Permanent, not pending upstream: reported as
+			// microsoft/TypeScript#63975 and declined --
 			// "We don't support plugins. We just ignore that entirely, let alone
 			// do any extending." That is reasonable upstream, where nothing reads
 			// the array; tsc-p reads it to activate its compiled-in plugins, so
