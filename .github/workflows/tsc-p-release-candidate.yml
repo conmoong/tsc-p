@@ -54,8 +54,8 @@ jobs:
 
       - name: Fetch upstream and the current candidate
         run: |
-          git config user.name "tsc-p release candidate"
-          git config user.email "release-candidate@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/microsoft/TypeScript
           git fetch --no-tags upstream "$UPSTREAM_LANE:refs/remotes/upstream/$UPSTREAM_LANE"
           git fetch --no-tags upstream main:refs/remotes/upstream/main
@@ -103,6 +103,7 @@ jobs:
         with:
           go-version-file: tsc/go.mod
           cache: true
+          cache-dependency-path: tsc/go.sum
 
       - name: Verify the candidate really builds and passes
         if: steps.inputs.outputs.changed == 'true' && steps.port.outputs.conflicted == 'false'
