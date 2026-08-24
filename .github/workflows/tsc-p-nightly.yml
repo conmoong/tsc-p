@@ -49,6 +49,14 @@ jobs:
           git fetch upstream main
           git checkout -b nightly-canary
           echo "upstream_sha=$(git rev-parse upstream/main)" >> "$GITHUB_OUTPUT"
+          # Once a sync PR has been merged, dev already contains upstream main
+          # until upstream moves again. The canary still builds and byte-compares
+          # (that is its real job), but there is nothing to open a PR about --
+          # and `gh pr create` errors outright on an empty diff.
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "already_current=true" >> "$GITHUB_OUTPUT"
+            echo "dev already contains upstream main; no sync PR needed"
+          fi
           if ! git merge --no-edit upstream/main; then
             echo "conflicts<<EOF" >> "$GITHUB_OUTPUT"
             git diff --name-only --diff-filter=U >> "$GITHUB_OUTPUT"
@@ -103,6 +111,7 @@ jobs:
       # fast-forward, which is the only way "click merge" can work: GitHub
       # cannot run the merge=ours driver itself.
       - name: Open or update the upstream sync PR
+        if: steps.merge.outputs.already_current != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
