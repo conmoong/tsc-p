@@ -48,31 +48,19 @@ jobs:
             echo "workflow_dispatch run: dry-run only, nothing will be published"
           fi
 
-      - name: Validate tag is strict semver and equals the manifest version
+      # Everything cheap that can reject the release happens here, before the
+      # build matrix: semver, the tag/version match, the version/upstream-tag
+      # policy in both directions, and whether the version is already on the
+      # registry. A forgotten version bump fails in seconds rather than after
+      # a full cross-compile.
+      - name: Validate the release policy
         if: steps.mode.outputs.publish == 'true'
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "tag $tag is not a strict semantic version" >&2
-            exit 1
-          fi
-          manifest_version="$(node -p 'require("./tsc-p/manifest.json").version')"
-          if [ "v$manifest_version" != "$tag" ]; then
-            echo "tag $tag does not match tsc-p/manifest.json version $manifest_version" >&2
-            exit 1
-          fi
+        run: npm run tscp:check:policy -- --tag "$GITHUB_REF_NAME" --check-npm
 
-      - name: Validate the version/upstream-tag policy
-        if: steps.mode.outputs.publish == 'true'
-        run: |
-          upstream_tag="$(node -p 'const t = require("./tsc-p/manifest.json").upstream.tag; t === null ? "" : t')"
-          manifest_version="$(node -p 'require("./tsc-p/manifest.json").version')"
-          if [ -z "$upstream_tag" ] && [[ "$manifest_version" != *-* ]]; then
-            echo "manifest.json's upstream.tag is null (tracking an untagged upstream commit), so .version" >&2
-            echo "must carry a prerelease suffix (X.Y.Z-<prerelease>) per the versioning policy in" >&2
-            echo "manifest.json's own \$comment -- got $manifest_version" >&2
-            exit 1
-          fi
+      # A dry run has no tag to match, but the manifest must still be coherent.
+      - name: Validate the release policy (dry run)
+        if: steps.mode.outputs.publish != 'true'
+        run: npm run tscp:check:policy
 
       - name: Verify the pinned upstream commit is recorded and is an ancestor
         run: |

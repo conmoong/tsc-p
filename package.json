@@ -13,6 +13,8 @@
         "tscp:build": "node tsc-p/scripts/build.mjs",
         "tscp:package": "node tsc-p/scripts/package.mjs",
         "tscp:verify-packages": "node tsc-p/scripts/verifyPackages.mjs",
+        "tscp:check:policy": "node tsc-p/scripts/checkReleasePolicy.mjs",
+        "tscp:port": "node tsc-p/scripts/portPatch.mjs",
         "tscp:release:dry-run": "node tsc-p/scripts/releaseDryRun.mjs",
         "tscp:test:launcher": "node tsc-p/scripts/launcherTest.mjs",
         "tscp:test:go": "go -C tsc test ./internal/tscp/... ./internal/compiler/",

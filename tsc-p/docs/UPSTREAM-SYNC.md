@@ -10,21 +10,49 @@ release-profile pin — so syncs are normally conflict-free.
 
 ## Branch model
 
+tsc-p runs **two lanes**, because upstream does. Upstream's `main` is the next
+minor's development line, and its stable tags live only on a release branch
+(`ts7-release`) that periodically merges `main` and is then tagged. Those tags
+are therefore *not* ancestors of `main`: no amount of merging `main` will ever
+reach one. The two lanes follow directly from that topology.
+
 | Branch | Role |
 |---|---|
-| `main` | Pristine mirror of upstream main. Never patched; fast-forward only. |
-| `dev` | The default branch: upstream stable release + the tsc-p patch. All work happens here. |
-| `nightly` | Disposable nightly canary output: latest upstream main + the patch. Force-pushed by automation; never commit to it and never branch from it. |
+| `dev` | **The default branch.** Upstream `main` + the tsc-p patch. All work happens here. Ships `-edge` prereleases under the npm `next` dist-tag. |
+| `sync/upstream-main` | Disposable. CI-merged upstream `main`, the head of the nightly sync PR. Force-pushed nightly. |
+| `release-candidate` | Disposable. Upstream's release lane + the tsc-p patch, **regenerated** by `portPatch.mjs`. Stable releases are cut from here. Never commit to it — it is force-rebuilt on every port. |
+
+There is deliberately no pristine `main` mirror: nothing in the tooling needs
+one (everything reads `upstream/*` remote-tracking refs directly), and a stale
+mirror is worse than none.
+
+Why continuous tracking of `main` rather than following the release branch:
+conflicts are cheap taken in small daily deltas and expensive taken in one big
+batch. Upstream's release branch sat still for six weeks and then absorbed
+`main` in one jump; tracking `main` means every conflict is small and fresh.
 
 ## Version/tag policy
 
 `tsc-p/manifest.json`'s `upstream.tag` records the stable release tag tsc-p
 tracks on `upstream.repository`, or `null` when no such tag exists yet and
-tsc-p is instead tracking a specific commit on upstream's `main`. Per the
-versioning policy in that file's own `$comment` (enforced by the release
-workflow): `.version` may only be a stable `X.Y.Z` when `upstream.tag` is
-non-null; whenever it's `null`, `.version` must carry a prerelease suffix
-(`X.Y.Z-rc.N`, published under the npm `next` dist-tag, never `latest`).
+tsc-p is instead tracking a specific commit on upstream's `main`. The rule,
+enforced in both directions by `tsc-p/scripts/checkReleasePolicy.mjs`:
+
+| `upstream.tag` | `.version` | npm dist-tag |
+|---|---|---|
+| `null` | **must** carry a prerelease suffix | `next` |
+| a real tag | **must not** carry one | `latest` |
+
+Prerelease suffixes are date-stamped by convention — `0.2.0-edge.20260824` —
+so each edge build gets a unique version (npm never allows republishing one)
+and they sort correctly ahead of the eventual `0.2.0`. This is a convention,
+not something the tooling generates: set `.version` by hand.
+
+Run it any time, not just at release:
+
+```sh
+npm run tscp:check:policy
+```
 
 ## Syncing to a new stable release
 
@@ -66,23 +94,73 @@ Then:
 6. Open a pull request into `dev`; merge when CI is green; release per
    [RELEASING.md](RELEASING.md).
 
-Also sync `main`: `git checkout main && git merge --ff-only upstream/main`.
-
 ## Automation
 
-Two scheduled workflows keep human intervention minimal:
+Three scheduled workflows keep human intervention minimal. None of them
+publishes anything, and none writes to `dev`: every change reaches `dev`
+through a pull request you merge.
 
-- **Nightly canary** (`tsc-p-nightly.yml`, ~00:30 AEST): merges `dev`
-  onto the latest upstream main in a throwaway branch, builds, runs all
-  tsc-p test suites, byte-compares emit output against a pristine upstream
-  build, then force-pushes the result to `nightly` and uploads nightly
-  binaries (7-day retention). On failure it opens or updates a single issue
-  labelled `nightly-canary`, and closes it again once green. It never
-  merges into `dev` and never publishes.
-- **Weekly watch** (`tsc-p-upstream-watch.yml`, Monday morning AEST):
-  compares the newest `v*` stable tag with the pinned manifest
-  version and opens one issue labelled `upstream-release` when a sync is
-  due.
+- **Nightly canary** (`tsc-p-nightly.yml`, ~00:30 AEST): merges `dev` onto the
+  latest upstream `main` in a throwaway branch, builds, runs all tsc-p test
+  suites, byte-compares emit output against a pristine upstream build, and
+  uploads nightly binaries (7-day retention). When the merge is clean it also
+  pushes `sync/upstream-main` and opens (or updates) a PR into `dev` — the
+  merge is done **in CI**, because `.gitattributes`'s `merge=ours` rules for
+  `README.md` and `Herebyfile.mjs` need `git config merge.ours.driver true`,
+  which GitHub's merge button does not have. On failure it opens or updates a
+  single issue labelled `nightly-canary`, closing it again once green.
+- **Release candidate** (`tsc-p-release-candidate.yml`, daily ~02:00 AEST):
+  regenerates `release-candidate` as upstream's release lane + the tsc-p
+  patch, then builds and tests it. Skips silently when neither input moved —
+  it compares the current `upstream/ts7-release` and `dev` SHAs against the
+  `Upstream-Sha:`/`Dev-Sha:` trailers recorded in the previous candidate's own
+  commit message, so there is no external state to keep. Reports via an issue
+  labelled `release-candidate` when the port stops applying.
+- **Upstream release watch** (`tsc-p-upstream-release-watch.yml`, Monday
+  morning AEST): compares the newest upstream `v*` stable tag with the pinned
+  manifest version and opens one issue labelled `upstream-release` when a sync
+  is due. A new tag is what makes a *stable* tsc-p release possible at all.
+
+## The release lane
+
+`release-candidate` is a **derived artifact**, not a maintained branch. Each
+port rebuilds it from scratch:
+
+```sh
+npm run tscp:port -- --onto upstream/ts7-release --from dev
+```
+
+This means nothing diverges and conflicts never accumulate: the only question
+ever asked is "does today's patch apply to today's upstream release line?".
+It also means **anything you commit to that branch is destroyed on the next
+run** — fixes must land in `dev`.
+
+`portPatch.mjs` splits the patch in two. Added paths (`tsc/internal/tscp/**`,
+`tsc-p/**`, …) are copied verbatim and cannot conflict textually — though they
+can still fail to *compile* if they call an upstream API that differs between
+lanes. The modified upstream files are asserted against an explicit allowlist
+and applied with a 3-way merge; if that list ever changes, the port fails
+loudly rather than silently growing the fork.
+
+Two mechanisms handle genuine divergence between lanes:
+
+- **Exclusions** — for patches upstream owns on that lane. The `version.go`
+  and `Herebyfile.mjs` pins exist only because `dev` tracks a development
+  line; a release lane already reports a stable version, so porting them
+  would fight upstream. Excluded automatically for non-`main` targets.
+- **Overlays** — `tsc-p/patches/<lane>/*.patch`, applied after the main patch,
+  for a change whose `main`-lane diff cannot apply because the surrounding
+  upstream code differs. The file is excluded from the main patch for that
+  lane (`LANE_EXCLUDES` in `portPatch.mjs`) and supplied here instead. Each
+  overlay records why it exists and when it can be deleted; keep the
+  directory as empty as possible, since every entry means the same change is
+  expressed twice.
+
+The ported manifest gets `upstream.tag` and `upstream.commit` stamped
+automatically — they describe the ref being ported onto, and left alone would
+put the wrong provenance in the release notes. `version` is deliberately not
+touched: that is your call, and the policy check will reject a real tag paired
+with a prerelease version, so a forgotten bump fails loudly.
 
 ### Handling a new nightly canary conflict
 

@@ -1,11 +1,18 @@
 # tsc-p nightly canary: merges the tsc-p patch (branch `dev`) onto the
 # latest upstream main, builds, tests, and byte-compares emit output against
-# a pristine upstream build. On success the result is force-pushed to the
-# disposable `nightly` branch and nightly binaries are uploaded as workflow
+# a pristine upstream build. Nightly binaries are uploaded as workflow
 # artefacts. On any failure a single tracking issue is created or updated.
 #
-# Nothing is ever merged into dev and nothing is published to npm; this is
-# an early-warning system so that stable-tag syncs hold no surprises.
+# When the merge is clean it also opens (or updates) a pull request bringing
+# upstream main into `dev`, so keeping the fork current is one click rather
+# than a chore. The merge is performed HERE, not by GitHub: `.gitattributes`
+# resolves README.md and Herebyfile.mjs with `merge=ours`, which is a custom
+# driver requiring `git config merge.ours.driver true` — GitHub's merge button
+# has no such config and would conflict on those files every single time. By
+# pushing an already-merged branch, the PR is a fast-forward and merges cleanly.
+#
+# Nothing is ever pushed to dev directly and nothing is published to npm; this
+# is an early-warning system, plus a low-friction way to accept upstream.
 
 name: tsc-p nightly canary
 
@@ -15,8 +22,9 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write # force-push the nightly branch
+  contents: write # push the upstream-sync branch
   issues: write # maintain the canary tracking issue
+  pull-requests: write # open/update the upstream-sync PR
 
 concurrency:
   group: tsc-p-nightly
@@ -90,8 +98,32 @@ jobs:
           path: built/tscp/bin/
           retention-days: 7
 
-      - name: Update the nightly branch
-        run: git push --force origin nightly-canary:nightly
+      # The merge already succeeded above (with merge.ours.driver configured),
+      # so this branch is dev+upstream already resolved. The resulting PR is a
+      # fast-forward, which is the only way "click merge" can work: GitHub
+      # cannot run the merge=ours driver itself.
+      - name: Open or update the upstream sync PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push --force origin nightly-canary:sync/upstream-main
+          if gh pr list --head sync/upstream-main --base dev --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "sync PR already open; branch updated in place"
+            exit 0
+          fi
+          gh pr create \
+            --head sync/upstream-main \
+            --base dev \
+            --title "Merge upstream main into dev" \
+            --body "Automated by the nightly canary. Upstream \`main\` merged into \`dev\` and verified: all suites pass and emit output is byte-identical to a pristine upstream build.
+
+          Upstream commit: ${{ steps.merge.outputs.upstream_sha }}
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          The merge was performed in CI with \`merge.ours.driver\` configured, so the
+          \`.gitattributes\` rules for README.md and Herebyfile.mjs are already applied
+          and this should merge as a fast-forward. Rebuilt nightly against the newest
+          upstream commit; safe to merge or ignore."
 
       - name: Close a previously open canary issue
         if: success()

@@ -1,9 +1,14 @@
-# tsc-p upstream watch: once a week, checks whether upstream has published
-# a stable TypeScript release tag newer than the one pinned in the manifest,
-# and opens a tracking issue if so. It never merges or publishes anything;
-# the sync itself follows tsc-p/docs/UPSTREAM-SYNC.md.
+# tsc-p upstream release watch: once a week, checks whether upstream has
+# published a stable TypeScript release tag newer than the one pinned in the
+# manifest, and opens a tracking issue if so. It never merges or publishes
+# anything; the sync itself follows tsc-p/docs/UPSTREAM-SYNC.md.
+#
+# A new tag is the signal that a stable tsc-p release becomes possible at all:
+# under the versioning policy, only a real upstream.tag permits a non-
+# prerelease version. Keeping the candidate branch current is a separate,
+# continuous job (tsc-p-release-candidate.yml).
 
-name: tsc-p upstream watch
+name: tsc-p upstream release watch
 
 on:
   schedule:

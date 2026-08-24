@@ -16,12 +16,37 @@ version, unchanged). Policy:
 
 **`.version` may only be a stable `X.Y.Z` when `upstream.tag` in the
 manifest is a real, resolvable tag** on `upstream.repository`. Whenever
-`upstream.tag` is `null` — tracking a commit on upstream's `main` that has
-no stable release tag yet, which is the current state since the upstream
-repository consolidation left no `v7.x` tag on `microsoft/TypeScript` —
-`.version` must carry a prerelease suffix (e.g. `0.2.0-rc.1`) and publish
-under `next`, never `latest`. The release workflow enforces this before
-publishing anything.
+`upstream.tag` is `null` — tracking a commit on upstream's `main` that has no
+stable release tag — `.version` must carry a prerelease suffix and publish
+under `next`, never `latest`. This is enforced in **both** directions
+(a real tag also *forbids* a prerelease suffix, so a candidate cannot ship an
+edge version as though it were the tagged release):
+
+```sh
+npm run tscp:check:policy                       # any time, locally
+npm run tscp:check:policy -- --tag v0.2.0 --check-npm   # what CI runs
+```
+
+The release workflow runs this in its `validate` job, before the build matrix,
+so a forgotten version bump or an already-published version fails in seconds
+rather than after a full cross-compile.
+
+**Prerelease naming.** Use a date stamp: `0.2.0-edge.20260824`. npm never
+allows republishing a version, so every edge build needs a fresh one, and the
+date sorts correctly ahead of the eventual `0.2.0`. This is a convention you
+apply by hand when editing the manifest — nothing generates it. Avoid
+sha-based suffixes: semver forbids leading zeros in numeric identifiers, and
+an all-digit hex sha starting with `0` is invalid.
+
+**Which lane you are releasing from** decides all of this:
+
+| Lane | `upstream.tag` | `.version` | dist-tag |
+|---|---|---|---|
+| `dev` (upstream `main`) | `null` | `X.Y.Z-edge.YYYYMMDD` | `next` |
+| `release-candidate` (upstream release line) | the upstream tag | `X.Y.Z` | `latest` |
+
+Publishing is always manual: edit `tsc-p/manifest.json`, push a `vX.Y.Z` tag,
+and the release workflow does the rest. Nothing publishes on a schedule.
 
 A release tag `vX.Y.Z` must equal `tsc-p/manifest.json` `.version` exactly;
 the release workflow enforces this, along with strict semver validation and

@@ -16,6 +16,8 @@ users of the npm packages need neither.
 | `npm run tscp:test:bin` | Compiles and runs a real fixture through each native/WASI binary for the current platform |
 | `npm run tscp:test:smoke` | Installs the packed tarballs into a clean temporary project and exercises `tsc-p` end to end, including a path-rewriting project and a bouncer project (both enabled via `compilerOptions.plugins`) whose emitted output is executed, plus a standalone install of the WASI fallback package |
 | `npm run tscp:release:dry-run` | All of the above for every target including WASI; the full local release rehearsal |
+| `npm run tscp:check:policy` | Checks `manifest.json`'s version against the `upstream.tag` policy (see [RELEASING.md](RELEASING.md)); add `-- --check-npm` to also verify the version is unpublished |
+| `npm run tscp:port -- --onto upstream/ts7-release` | Regenerates the `release-candidate` branch: upstream's release lane + the tsc-p patch (see [UPSTREAM-SYNC.md](UPSTREAM-SYNC.md)); `--dry-run` inspects the patch shape without touching branches |
 
 Calling a script directly (e.g. `node tsc-p/scripts/build.mjs`) works
 identically to its `npm run` equivalent.

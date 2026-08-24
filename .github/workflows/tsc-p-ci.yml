@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - dev
-      - nightly
+      - release-candidate
   pull_request:
     branches:
       - dev
