@@ -99,7 +99,11 @@ if it looks unused or in your way. Touching a file you don't need turns a
 silent future upstream merge into a conflict; not touching it means
 upstream changes merge in with zero action from us.
 
-The only upstream files this fork modifies, ever, are:
+The only upstream files this fork modifies, ever, are the following. They fall
+into two groups, and only the first is a real conflict surface — the identity
+docs are `merge=ours`, replaced wholesale, and never conflict.
+
+**Code and build configuration** — the part to keep small:
 
 | File | What changed |
 |---|---|
@@ -111,7 +115,24 @@ The only upstream files this fork modifies, ever, are:
 | `package.json` | Adds `tscp:*` scripts (build/package/test/publish, under `tsc-p/scripts/`); every existing script is untouched |
 | `.gitattributes` | Two `merge=ours` lines — `README.md` (the fork readme) and `Herebyfile.mjs` (see below) — so both always keep this fork's version across an upstream merge instead of conflicting |
 | `Herebyfile.mjs` | Pins the native-preview release profile to tsc-p's tracked stable version instead of upstream's own prerelease/nightly profile |
-| `README.md` | Replaced with the fork readme |
+**Project-identity docs** — replaced wholesale, all `merge=ours`, so upstream's
+edits to them never reach us and never conflict:
+
+| File | Why |
+|---|---|
+| `README.md` | The fork readme |
+| `CONTRIBUTING.md` | Upstream's asks for a Microsoft CLA that does not apply here; ours routes changes to upstream vs here, which is the distinction that actually matters |
+| `SECURITY.md` | Upstream's routes vulnerability reports to MSRC, who do not maintain this software and cannot act on them — the one genuinely harmful file to leave in place |
+| `SUPPORT.md` | Upstream's points at Microsoft support channels |
+| `CODE_OF_CONDUCT.md` | Upstream's adopts Microsoft's CoC and contact address |
+
+**Never touch `LICENSE.txt` or `NOTICE.txt`.** Apache-2.0 §4(d) requires
+derivative works to carry the upstream `NOTICE` file, and `package.mjs` copies
+it into every published package for exactly that reason. Upstream's changes to
+both must flow through untouched — they are deliberately *not* `merge=ours`.
+tsc-p adds no third-party code of its own, so it needs no notices of its own;
+if that ever changes, Apache-2.0 permits adding them alongside, never editing
+what is there.
 
 Everything else tsc-p adds lives under `tsc/internal/tscp/` (Go) and
 `tsc-p/` (npm packaging, scripts, docs, CI). If a change to this fork

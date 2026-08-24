@@ -54,6 +54,13 @@ const LANE_EXCLUDES = {
 // Every upstream file tsc-p modifies. Keep in sync with AGENTS.md's table.
 const MODIFIED_UPSTREAM_FILES = [
     ".gitattributes",
+    // Project-identity docs, replaced wholesale rather than patched. All are
+    // merge=ours, so they never conflict on an upstream merge. NOTICE.txt and
+    // LICENSE.txt are deliberately absent: Apache-2.0 requires them intact.
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
     "Herebyfile.mjs",
     "README.md",
     "package.json",
