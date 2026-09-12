@@ -115,8 +115,23 @@ jobs:
         if: steps.merge.outputs.already_current != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          SYNC_TOKEN: ${{ secrets.TSCP_SYNC_TOKEN }}
         run: |
-          git push --force origin nightly-canary:sync/upstream-main
+          # GITHUB_TOKEN is forbidden from creating or updating anything under
+          # .github/workflows/, with no `permissions:` key that can grant it --
+          # it is a hard platform rule against a workflow escalating itself.
+          # Upstream touches its workflows often (dependabot bumps, CI reshuffles),
+          # so without a separate credential this push fails on most syncs.
+          # TSCP_SYNC_TOKEN, when set, is a PAT scoped to this repo with Contents
+          # and Workflows write; see tsc-p/docs/UPSTREAM-SYNC.md.
+          remote=origin
+          if [ -n "$SYNC_TOKEN" ]; then
+            remote="https://x-access-token:$SYNC_TOKEN@github.com/${{ github.repository }}"
+          elif ! git diff --quiet "$(git merge-base HEAD origin/dev)" HEAD -- .github/workflows/; then
+            echo "::warning::Upstream changed .github/workflows/ and TSCP_SYNC_TOKEN is not set, so the sync branch cannot be pushed. The tree above is verified green; merge it locally with: git fetch upstream && git merge upstream/main"
+            exit 0
+          fi
+          git push --force "$remote" nightly-canary:sync/upstream-main
           if gh pr list --head sync/upstream-main --base dev --state open --json number --jq '.[0].number' | grep -q .; then
             echo "sync PR already open; branch updated in place"
             exit 0
@@ -140,6 +155,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh label create nightly-canary --color FBCA04 --description "tsc-p nightly canary against upstream main" --force >/dev/null
           issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
           if [ -n "$issue" ]; then
             gh issue close "$issue" --comment "Nightly canary is green again against upstream $(git rev-parse --short upstream/main): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -155,6 +171,7 @@ jobs:
           Upstream commit: ${{ steps.merge.outputs.upstream_sha }}
           Merge conflicts (if any):
           ${{ steps.merge.outputs.conflicts }}"
+          gh label create nightly-canary --color FBCA04 --description "tsc-p nightly canary against upstream main" --force >/dev/null
           issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
           if [ -n "$issue" ]; then
             gh issue comment "$issue" --body "$body"

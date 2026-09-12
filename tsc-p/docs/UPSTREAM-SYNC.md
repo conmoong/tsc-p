@@ -125,6 +125,28 @@ through a pull request you merge.
   manifest version and opens one issue labelled `upstream-release` when a sync
   is due. A new tag is what makes a *stable* tsc-p release possible at all.
 
+### `TSCP_SYNC_TOKEN`
+
+The nightly canary and the release-candidate port both push branches that
+carry upstream's `.github/workflows/` files, and `GITHUB_TOKEN` is forbidden
+from creating or updating anything under that path — a platform rule against
+a workflow escalating its own permissions, with no `permissions:` key that
+grants it. Upstream edits its workflows often (dependabot bumps, CI
+reshuffles), so this is the common case, not an edge one.
+
+`TSCP_SYNC_TOKEN` is the repository secret that makes those pushes work: a
+fine-grained personal access token scoped to this repository alone, with
+**Contents: read and write** and **Workflows: read and write**. (If a
+fine-grained token cannot be given Workflows access, a classic token with the
+`workflow` scope does the same job with a wider blast radius.) Set it under
+*Settings → Secrets and variables → Actions*.
+
+Without it neither push is fatal: the canary still builds, tests, and
+byte-compares — its real job — then warns and skips the push, leaving the
+sync to `git fetch upstream && git merge upstream/main` locally. The
+candidate branch likewise falls back to being regenerated with
+`npm run tscp:port`.
+
 ## The release lane
 
 `release-candidate` is a **derived artifact**, not a maintained branch. Each

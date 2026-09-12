@@ -116,7 +116,19 @@ jobs:
       # thing worth seeing early, and the branch is disposable either way.
       - name: Publish the candidate branch
         if: steps.inputs.outputs.changed == 'true'
-        run: git push --force origin release-candidate
+        env:
+          SYNC_TOKEN: ${{ secrets.TSCP_SYNC_TOKEN }}
+        run: |
+          # The candidate is regenerated from upstream's tree, so it carries
+          # upstream's .github/workflows/ -- which GITHUB_TOKEN may never create
+          # or update, by platform rule. TSCP_SYNC_TOKEN (repo-scoped PAT with
+          # Contents + Workflows write) is what makes this push possible; without
+          # it the candidate can only be regenerated locally via tscp:port.
+          if [ -n "$SYNC_TOKEN" ]; then
+            git push --force "https://x-access-token:$SYNC_TOKEN@github.com/${{ github.repository }}" release-candidate
+          else
+            git push --force origin release-candidate
+          fi
 
       - name: Report a port that no longer applies
         if: failure() || steps.port.outputs.conflicted == 'true'
@@ -138,6 +150,7 @@ jobs:
           if the change cannot be expressed as one diff that applies to both
           upstream lanes. Never fix the candidate branch directly — it is
           force-rebuilt on the next run."
+          gh label create release-candidate --color 0E8A16 --description "tsc-p release-candidate port status" --force >/dev/null
           existing=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
@@ -150,6 +163,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh label create release-candidate --color 0E8A16 --description "tsc-p release-candidate port status" --force >/dev/null
           issue=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty')
           if [ -n "$issue" ]; then
             gh issue close "$issue" --comment "Port is clean again: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

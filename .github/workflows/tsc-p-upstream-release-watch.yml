@@ -49,6 +49,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           title="Upstream TypeScript ${{ steps.compare.outputs.latest }} released"
+          gh label create upstream-release --color 1D76DB --description "A new upstream TypeScript release to pin" --force >/dev/null
           existing=$(gh issue list --label upstream-release --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             echo "issue #$existing already tracks this release"
