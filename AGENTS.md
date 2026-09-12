@@ -205,7 +205,8 @@ arises rather than duplicating parsing logic in a new plugin.
 
 This is deliberately **not** a generic third-party plugin system: no
 dynamic loading, no config-file plugin references. Upstream is building one of
-those (content mappers today, custom transformers planned for 7.1); see
+those (content mappers today, custom transformers on the 7.1 plan but not
+yet started); see
 [tsc-p/docs/UPSTREAM-API-OUTLOOK.md](tsc-p/docs/UPSTREAM-API-OUTLOOK.md) for
 what that changes and what it does not. Plugins are first-party
 Go packages compiled into the binary and wired up explicitly through
