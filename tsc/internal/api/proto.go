@@ -6,18 +6,22 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/microsoft/TypeScript/tsc/internal/api/requestfilesystem"
 	"github.com/microsoft/TypeScript/tsc/internal/ast"
 	"github.com/microsoft/TypeScript/tsc/internal/checker"
 	"github.com/microsoft/TypeScript/tsc/internal/collections"
 	"github.com/microsoft/TypeScript/tsc/internal/core"
 	"github.com/microsoft/TypeScript/tsc/internal/diagnostics"
+	"github.com/microsoft/TypeScript/tsc/internal/diagnosticwriter"
 	"github.com/microsoft/TypeScript/tsc/internal/jsnum"
 	"github.com/microsoft/TypeScript/tsc/internal/json"
 	"github.com/microsoft/TypeScript/tsc/internal/locale"
 	"github.com/microsoft/TypeScript/tsc/internal/ls/lsconv"
 	"github.com/microsoft/TypeScript/tsc/internal/lsp/lsproto"
+	"github.com/microsoft/TypeScript/tsc/internal/module"
 	"github.com/microsoft/TypeScript/tsc/internal/packagejson"
 	"github.com/microsoft/TypeScript/tsc/internal/project"
+	"github.com/microsoft/TypeScript/tsc/internal/scanner"
 	"github.com/microsoft/TypeScript/tsc/internal/tsoptions"
 	"github.com/microsoft/TypeScript/tsc/internal/tspath"
 )
@@ -61,40 +65,48 @@ func parseProjectHandle(handle ProjectID) tspath.Path {
 const (
 	MethodRelease Method = "release"
 
-	MethodInitialize                   Method = "initialize"
-	MethodUpdateSnapshot               Method = "updateSnapshot"
-	MethodUpdateTemporarySnapshot      Method = "updateTemporarySnapshot"
-	MethodParseCommandLine             Method = "parseCommandLine"
-	MethodReadConfigFile               Method = "readConfigFile"
-	MethodParseJsonConfigFile          Method = "parseJsonConfigFileContent"
-	MethodParseConfigFile              Method = "parseConfigFile"
-	MethodTranspileModule              Method = "transpileModule"
-	MethodTranspileModuleFromFile      Method = "transpileModuleFromFile"
-	MethodTranspileDeclaration         Method = "transpileDeclaration"
-	MethodTranspileDeclarationFromFile Method = "transpileDeclarationFromFile"
-	MethodGetDefaultProjectForFile     Method = "getDefaultProjectForFile"
-	MethodGetSymbolAtPosition          Method = "getSymbolAtPosition"
-	MethodGetSymbolsAtPositions        Method = "getSymbolsAtPositions"
-	MethodGetSymbolAtLocation          Method = "getSymbolAtLocation"
-	MethodGetSymbolsAtLocations        Method = "getSymbolsAtLocations"
-	MethodGetSymbolOfSourceFile        Method = "getSymbolOfSourceFile"
-	MethodGetSymbolsOfSourceFiles      Method = "getSymbolsOfSourceFiles"
-	MethodGetTypeOfSymbol              Method = "getTypeOfSymbol"
-	MethodGetTypesOfSymbols            Method = "getTypesOfSymbols"
-	MethodGetDeclaredTypeOfSymbol      Method = "getDeclaredTypeOfSymbol"
-	MethodGetSourceFile                Method = "getSourceFile"
-	MethodGetSourceFileNames           Method = "getSourceFileNames"
-	MethodGetSourceFileMetadata        Method = "getSourceFileMetadata"
-	MethodGetConfigFileNames           Method = "getConfigFileNames"
-	MethodGetConfigSourceFile          Method = "getConfigSourceFile"
-	MethodResolveName                  Method = "resolveName"
-	MethodGetSymbolsInScope            Method = "getSymbolsInScope"
-	MethodGetSignaturesOfType          Method = "getSignaturesOfType"
-	MethodGetResolvedSignature         Method = "getResolvedSignature"
-	MethodGetTypeAtLocation            Method = "getTypeAtLocation"
-	MethodGetTypeAtLocations           Method = "getTypeAtLocations"
-	MethodGetTypeAtPosition            Method = "getTypeAtPosition"
-	MethodGetTypesAtPositions          Method = "getTypesAtPositions"
+	MethodBatchRequests Method = "batchRequests"
+
+	MethodInitialize                                     Method = "initialize"
+	MethodUpdateSnapshot                                 Method = "updateSnapshot"
+	MethodUpdateTemporarySnapshot                        Method = "updateTemporarySnapshot"
+	MethodCreateProgram                                  Method = "createProgram"
+	MethodParseCommandLine                               Method = "parseCommandLine"
+	MethodReadConfigFile                                 Method = "readConfigFile"
+	MethodParseJsonConfigFile                            Method = "parseJsonConfigFileContent"
+	MethodParseConfigFile                                Method = "parseConfigFile"
+	MethodTranspileModule                                Method = "transpileModule"
+	MethodTranspileModuleFromFile                        Method = "transpileModuleFromFile"
+	MethodTranspileDeclaration                           Method = "transpileDeclaration"
+	MethodTranspileDeclarationFromFile                   Method = "transpileDeclarationFromFile"
+	MethodGetDefaultProjectForFile                       Method = "getDefaultProjectForFile"
+	MethodGetSymbolAtPosition                            Method = "getSymbolAtPosition"
+	MethodGetSymbolsAtPositions                          Method = "getSymbolsAtPositions"
+	MethodGetSymbolAtLocation                            Method = "getSymbolAtLocation"
+	MethodGetSymbolsAtLocations                          Method = "getSymbolsAtLocations"
+	MethodGetSymbolOfSourceFile                          Method = "getSymbolOfSourceFile"
+	MethodGetSymbolsOfSourceFiles                        Method = "getSymbolsOfSourceFiles"
+	MethodGetTypeOfSymbol                                Method = "getTypeOfSymbol"
+	MethodGetTypesOfSymbols                              Method = "getTypesOfSymbols"
+	MethodGetDeclaredTypeOfSymbol                        Method = "getDeclaredTypeOfSymbol"
+	MethodGetNonMissingTypeOfSymbol                      Method = "getNonMissingTypeOfSymbol"
+	MethodGetSourceFile                                  Method = "getSourceFile"
+	MethodGetSourceFileNames                             Method = "getSourceFileNames"
+	MethodGetSourceFileMetadata                          Method = "getSourceFileMetadata"
+	MethodGetResolvedModule                              Method = "getResolvedModule"
+	MethodGetResolvedModuleFromModuleSpecifier           Method = "getResolvedModuleFromModuleSpecifier"
+	MethodGetResolvedTypeReferenceDirective              Method = "getResolvedTypeReferenceDirective"
+	MethodGetResolvedTypeReferenceDirectiveFromReference Method = "getResolvedTypeReferenceDirectiveFromTypeReferenceDirective"
+	MethodGetConfigFileNames                             Method = "getConfigFileNames"
+	MethodGetConfigSourceFile                            Method = "getConfigSourceFile"
+	MethodResolveName                                    Method = "resolveName"
+	MethodGetSymbolsInScope                              Method = "getSymbolsInScope"
+	MethodGetSignaturesOfType                            Method = "getSignaturesOfType"
+	MethodGetResolvedSignature                           Method = "getResolvedSignature"
+	MethodGetTypeAtLocation                              Method = "getTypeAtLocation"
+	MethodGetTypeAtLocations                             Method = "getTypeAtLocations"
+	MethodGetTypeAtPosition                              Method = "getTypeAtPosition"
+	MethodGetTypesAtPositions                            Method = "getTypesAtPositions"
 
 	// Symbol sub-property methods
 	MethodGetParentOfSymbol       Method = "getParentOfSymbol"
@@ -164,13 +176,14 @@ const (
 	MethodGetExportSpecifierLocalTarget     Method = "getExportSpecifierLocalTargetSymbol"
 	MethodGetAliasedSymbol                  Method = "getAliasedSymbol"
 	MethodGetImmediateAliasedSymbol         Method = "getImmediateAliasedSymbol"
+	MethodGetTargetSymbol                   Method = "getTargetSymbol"
 	MethodGetFullyQualifiedName             Method = "getFullyQualifiedName"
 	MethodGetExportsOfModule                Method = "getExportsOfModule"
 	MethodGetMemberInModuleExports          Method = "getMemberInModuleExports"
 	MethodGetJSDocTags                      Method = "getJsDocTags"
 	MethodGetDocumentationComment           Method = "getDocumentationComment"
 	MethodIsArrayType                       Method = "isArrayType"
-	MethodIsTupleType                       Method = "isTupleType"
+	MethodIsReadonlySymbol                  Method = "isReadonlySymbol"
 
 	// Reference methods
 	MethodGetReferencesToSymbolInFile Method = "getReferencesToSymbolInFile"
@@ -189,7 +202,6 @@ const (
 	MethodGetProgramDiagnostics           Method = "getProgramDiagnostics"
 	MethodGetGlobalDiagnostics            Method = "getGlobalDiagnostics"
 	MethodGetConfigFileParsingDiagnostics Method = "getConfigFileParsingDiagnostics"
-
 	// Emitter methods
 	MethodPrintNode              Method = "printNode"
 	MethodFormatNodeForInsertion Method = "formatNodeForInsertion"
@@ -338,6 +350,9 @@ type APIFileChanges struct {
 // UpdateSnapshotParams are the parameters for creating a new snapshot.
 // All fields are optional. With no fields set, the server adopts the latest LSP state.
 type UpdateSnapshotParams struct {
+	// Snapshot, when set, requires this to be the latest active snapshot and layers
+	// FileSystem over that snapshot's filesystem. Used by Snapshot.update.
+	Snapshot SnapshotID `json:"snapshot,omitempty"`
 	// OpenProjects lists tsconfig.json files to open/load in the new snapshot.
 	// Opens are ref-counted and persist across snapshots until closed.
 	OpenProjects []DocumentIdentifier `json:"openProjects,omitempty"`
@@ -346,6 +361,10 @@ type UpdateSnapshotParams struct {
 	CloseProjects []DocumentIdentifier `json:"closeProjects,omitempty"`
 	// FileChanges describes file system changes since the last snapshot.
 	FileChanges *APIFileChanges `json:"fileChanges,omitempty"`
+	// FileSystem supplies file contents and directory listings for the new snapshot.
+	// A full filesystem is canonical and total. A filesystem layer is checked
+	// before falling back to the host filesystem.
+	FileSystem *requestfilesystem.RequestFileSystem `json:"fileSystem,omitempty"`
 	// OpenFiles lists files to keep open for the API client, mirroring LSP's
 	// textDocument/didOpen. For each file, ancestor directories are searched for a
 	// tsconfig that contains it; if found, that configured project is loaded and
@@ -367,6 +386,29 @@ type UpdateTemporarySnapshotParams struct {
 	File DocumentIdentifier `json:"file"`
 	// NewText is the temporary content for the file.
 	NewText string `json:"newText"`
+}
+
+type CreateProgramParams struct {
+	RootFiles            []DocumentIdentifier           `json:"rootFiles"`
+	CreateProgramOptions CreateProgramOptions           `json:"createProgramOptions"`
+	OldProgram           *CreateProgramOldProgramParams `json:"oldProgram,omitempty"`
+	FileChanges          *APIFileChanges                `json:"fileChanges,omitempty"`
+}
+
+type CreateProgramOptions struct {
+	CompilerOptions              core.CompilerOptions     `json:"compilerOptions"`
+	ProjectReferences            []*core.ProjectReference `json:"projectReferences,omitempty"`
+	ConfigFileParsingDiagnostics []*DiagnosticResponse    `json:"configFileParsingDiagnostics,omitempty"`
+}
+
+type CreateProgramOldProgramParams struct {
+	Snapshot SnapshotID `json:"snapshot,omitempty"`
+	Project  ProjectID  `json:"project,omitempty"`
+}
+
+type CreateProgramResponse struct {
+	Snapshot SnapshotID       `json:"snapshot"`
+	Project  *ProjectResponse `json:"project"`
 }
 
 // ProjectFileChanges describes what source files changed within a single project.
@@ -401,41 +443,48 @@ type UpdateSnapshotResponse struct {
 }
 
 var unmarshalers = map[Method]func([]byte) (any, error){
-	MethodRelease:                      unmarshallerFor[ReleaseParams],
-	MethodInitialize:                   noParams,
-	MethodUpdateSnapshot:               unmarshallerFor[UpdateSnapshotParams],
-	MethodUpdateTemporarySnapshot:      unmarshallerFor[UpdateTemporarySnapshotParams],
-	MethodParseCommandLine:             unmarshallerFor[ParseCommandLineParams],
-	MethodReadConfigFile:               unmarshallerFor[ReadConfigFileParams],
-	MethodParseJsonConfigFile:          unmarshallerFor[ParseJsonConfigFileContentParams],
-	MethodParseConfigFile:              unmarshallerFor[ParseConfigFileParams],
-	MethodTranspileModule:              unmarshallerFor[TranspileParams],
-	MethodTranspileModuleFromFile:      unmarshallerFor[TranspileFromFileParams],
-	MethodTranspileDeclaration:         unmarshallerFor[TranspileParams],
-	MethodTranspileDeclarationFromFile: unmarshallerFor[TranspileFromFileParams],
-	MethodGetDefaultProjectForFile:     unmarshallerFor[GetDefaultProjectForFileParams],
-	MethodGetSourceFile:                unmarshallerFor[GetSourceFileParams],
-	MethodGetSourceFileNames:           unmarshallerFor[GetSourceFileNamesParams],
-	MethodGetSourceFileMetadata:        unmarshallerFor[GetSourceFileParams],
-	MethodGetConfigFileNames:           unmarshallerFor[GetProjectDiagnosticsParams],
-	MethodGetConfigSourceFile:          unmarshallerFor[GetSourceFileParams],
-	MethodGetSymbolAtPosition:          unmarshallerFor[GetSymbolAtPositionParams],
-	MethodGetSymbolsAtPositions:        unmarshallerFor[GetSymbolsAtPositionsParams],
-	MethodGetSymbolAtLocation:          unmarshallerFor[GetSymbolAtLocationParams],
-	MethodGetSymbolsAtLocations:        unmarshallerFor[GetSymbolsAtLocationsParams],
-	MethodGetSymbolOfSourceFile:        unmarshallerFor[GetSymbolOfSourceFileParams],
-	MethodGetSymbolsOfSourceFiles:      unmarshallerFor[GetSymbolsOfSourceFilesParams],
-	MethodGetTypeOfSymbol:              unmarshallerFor[GetTypeOfSymbolParams],
-	MethodGetTypesOfSymbols:            unmarshallerFor[GetTypesOfSymbolsParams],
-	MethodGetDeclaredTypeOfSymbol:      unmarshallerFor[GetTypeOfSymbolParams],
-	MethodResolveName:                  unmarshallerFor[ResolveNameParams],
-	MethodGetSymbolsInScope:            unmarshallerFor[GetSymbolsInScopeParams],
-	MethodGetSignaturesOfType:          unmarshallerFor[GetSignaturesOfTypeParams],
-	MethodGetResolvedSignature:         unmarshallerFor[GetResolvedSignatureParams],
-	MethodGetTypeAtLocation:            unmarshallerFor[GetTypeAtLocationParams],
-	MethodGetTypeAtLocations:           unmarshallerFor[GetTypeAtLocationsParams],
-	MethodGetTypeAtPosition:            unmarshallerFor[GetTypeAtPositionParams],
-	MethodGetTypesAtPositions:          unmarshallerFor[GetTypesAtPositionsParams],
+	MethodBatchRequests:                                  unmarshallerFor[BatchRequestsParams],
+	MethodRelease:                                        unmarshallerFor[ReleaseParams],
+	MethodInitialize:                                     noParams,
+	MethodUpdateSnapshot:                                 unmarshallerFor[UpdateSnapshotParams],
+	MethodUpdateTemporarySnapshot:                        unmarshallerFor[UpdateTemporarySnapshotParams],
+	MethodCreateProgram:                                  unmarshallerFor[CreateProgramParams],
+	MethodParseCommandLine:                               unmarshallerFor[ParseCommandLineParams],
+	MethodReadConfigFile:                                 unmarshallerFor[ReadConfigFileParams],
+	MethodParseJsonConfigFile:                            unmarshallerFor[ParseJsonConfigFileContentParams],
+	MethodParseConfigFile:                                unmarshallerFor[ParseConfigFileParams],
+	MethodTranspileModule:                                unmarshallerFor[TranspileParams],
+	MethodTranspileModuleFromFile:                        unmarshallerFor[TranspileFromFileParams],
+	MethodTranspileDeclaration:                           unmarshallerFor[TranspileParams],
+	MethodTranspileDeclarationFromFile:                   unmarshallerFor[TranspileFromFileParams],
+	MethodGetDefaultProjectForFile:                       unmarshallerFor[GetDefaultProjectForFileParams],
+	MethodGetSourceFile:                                  unmarshallerFor[GetSourceFileParams],
+	MethodGetSourceFileNames:                             unmarshallerFor[GetSourceFileNamesParams],
+	MethodGetSourceFileMetadata:                          unmarshallerFor[GetSourceFileParams],
+	MethodGetResolvedModule:                              unmarshallerFor[GetResolvedModuleParams],
+	MethodGetResolvedModuleFromModuleSpecifier:           unmarshallerFor[GetResolvedModuleFromModuleSpecifierParams],
+	MethodGetResolvedTypeReferenceDirective:              unmarshallerFor[GetResolvedTypeReferenceDirectiveParams],
+	MethodGetResolvedTypeReferenceDirectiveFromReference: unmarshallerFor[GetResolvedTypeReferenceDirectiveFromReferenceParams],
+	MethodGetConfigFileNames:                             unmarshallerFor[GetProjectDiagnosticsParams],
+	MethodGetConfigSourceFile:                            unmarshallerFor[GetSourceFileParams],
+	MethodGetSymbolAtPosition:                            unmarshallerFor[GetSymbolAtPositionParams],
+	MethodGetSymbolsAtPositions:                          unmarshallerFor[GetSymbolsAtPositionsParams],
+	MethodGetSymbolAtLocation:                            unmarshallerFor[GetSymbolAtLocationParams],
+	MethodGetSymbolsAtLocations:                          unmarshallerFor[GetSymbolsAtLocationsParams],
+	MethodGetSymbolOfSourceFile:                          unmarshallerFor[GetSymbolOfSourceFileParams],
+	MethodGetSymbolsOfSourceFiles:                        unmarshallerFor[GetSymbolsOfSourceFilesParams],
+	MethodGetTypeOfSymbol:                                unmarshallerFor[GetTypeOfSymbolParams],
+	MethodGetTypesOfSymbols:                              unmarshallerFor[GetTypesOfSymbolsParams],
+	MethodGetDeclaredTypeOfSymbol:                        unmarshallerFor[GetTypeOfSymbolParams],
+	MethodGetNonMissingTypeOfSymbol:                      unmarshallerFor[GetTypeOfSymbolParams],
+	MethodResolveName:                                    unmarshallerFor[ResolveNameParams],
+	MethodGetSymbolsInScope:                              unmarshallerFor[GetSymbolsInScopeParams],
+	MethodGetSignaturesOfType:                            unmarshallerFor[GetSignaturesOfTypeParams],
+	MethodGetResolvedSignature:                           unmarshallerFor[GetResolvedSignatureParams],
+	MethodGetTypeAtLocation:                              unmarshallerFor[GetTypeAtLocationParams],
+	MethodGetTypeAtLocations:                             unmarshallerFor[GetTypeAtLocationsParams],
+	MethodGetTypeAtPosition:                              unmarshallerFor[GetTypeAtPositionParams],
+	MethodGetTypesAtPositions:                            unmarshallerFor[GetTypesAtPositionsParams],
 
 	MethodGetParentOfSymbol:       unmarshallerFor[GetSymbolPropertyParams],
 	MethodGetMembersOfSymbol:      unmarshallerFor[GetSymbolPropertyParams],
@@ -501,13 +550,14 @@ var unmarshalers = map[Method]func([]byte) (any, error){
 	MethodGetExportSpecifierLocalTarget:     unmarshallerFor[CheckerNodeParams],
 	MethodGetAliasedSymbol:                  unmarshallerFor[CheckerSymbolParams],
 	MethodGetImmediateAliasedSymbol:         unmarshallerFor[CheckerSymbolParams],
+	MethodGetTargetSymbol:                   unmarshallerFor[CheckerSymbolParams],
 	MethodGetFullyQualifiedName:             unmarshallerFor[CheckerSymbolParams],
 	MethodGetExportsOfModule:                unmarshallerFor[CheckerSymbolParams],
 	MethodGetMemberInModuleExports:          unmarshallerFor[GetMemberInModuleExportsParams],
 	MethodGetJSDocTags:                      unmarshallerFor[CheckerSymbolParams],
 	MethodGetDocumentationComment:           unmarshallerFor[CheckerSymbolParams],
 	MethodIsArrayType:                       unmarshallerFor[CheckerTypeParams],
-	MethodIsTupleType:                       unmarshallerFor[CheckerTypeParams],
+	MethodIsReadonlySymbol:                  unmarshallerFor[CheckerSymbolParams],
 	MethodGetReferencesToSymbolInFile:       unmarshallerFor[GetReferencesToSymbolInFileParams],
 	MethodGetReferencedSymbolsForNode:       unmarshallerFor[GetReferencedSymbolsForNodeParams],
 	MethodGetSignatureUsages:                unmarshallerFor[GetSignatureUsagesParams],
@@ -610,6 +660,68 @@ type TranspileOutputResponse struct {
 	SourceMapText string                `json:"sourceMapText,omitempty"`
 }
 
+type BatchRequestsParams struct {
+	Requests                []BatchRequest `json:"requests"`
+	ContinuationToken       string         `json:"continuationToken,omitempty"`
+	MaxResponseBytesPerPage int            `json:"maxResponseBytesPerPage,omitempty"`
+}
+
+type BatchRequest struct {
+	Method Method     `json:"method"`
+	Params json.Value `json:"params,omitempty"`
+}
+
+type BatchRequestsResponse struct {
+	Responses         []BatchResponse `json:"responses" nonnil:"true"`
+	ContinuationToken string          `json:"continuationToken,omitempty"`
+	encodedResponses  []json.Value
+}
+
+var _ json.MarshalerTo = (*BatchRequestsResponse)(nil)
+
+func (r *BatchRequestsResponse) MarshalJSONTo(enc *json.Encoder) error {
+	if err := enc.WriteToken(json.BeginObject); err != nil {
+		return err
+	}
+	if err := enc.WriteValue(json.Value(`"responses"`)); err != nil {
+		return err
+	}
+	if err := enc.WriteToken(json.BeginArray); err != nil {
+		return err
+	}
+	if r.encodedResponses != nil {
+		for _, response := range r.encodedResponses {
+			if err := enc.WriteValue(response); err != nil {
+				return err
+			}
+		}
+	} else {
+		for i := range r.Responses {
+			if err := json.MarshalEncode(enc, &r.Responses[i]); err != nil {
+				return err
+			}
+		}
+	}
+	if err := enc.WriteToken(json.EndArray); err != nil {
+		return err
+	}
+	if r.ContinuationToken != "" {
+		if err := enc.WriteValue(json.Value(`"continuationToken"`)); err != nil {
+			return err
+		}
+		if err := json.MarshalEncode(enc, r.ContinuationToken); err != nil {
+			return err
+		}
+	}
+	return enc.WriteToken(json.EndObject)
+}
+
+type BatchResponse struct {
+	Method Method `json:"method"`
+	Result any    `json:"result"`
+	Error  string `json:"error,omitempty"`
+}
+
 // ReleaseParams are the parameters for the release method.
 type ReleaseParams struct {
 	Snapshot SnapshotID `json:"snapshot"`
@@ -646,6 +758,7 @@ type GetDefaultProjectForFileParams struct {
 type ProjectResponse struct {
 	Id                ProjectID           `json:"id"`
 	ConfigFileName    string              `json:"configFileName"`
+	CurrentDirectory  string              `json:"currentDirectory"`
 	ParsedCommandLine *ConfigFileResponse `json:"parsedCommandLine" nonnil:"true"`
 	// Deprecated: Use parsedCommandLine.fileNames.
 	RootFiles []string `json:"rootFiles" nonnil:"true"`
@@ -713,6 +826,7 @@ func NewProjectResponse(p *project.Project) *ProjectResponse {
 	return &ProjectResponse{
 		Id:                ProjectHandle(p),
 		ConfigFileName:    p.Name(),
+		CurrentDirectory:  p.CurrentDirectory(),
 		ParsedCommandLine: NewConfigFileResponse(p.CommandLine),
 		RootFiles:         p.CommandLine.FileNames(),
 		CompilerOptions:   p.CommandLine.CompilerOptions(),
@@ -798,6 +912,7 @@ type TypeResponse struct {
 	Id          TypeID `json:"id"`
 	Flags       uint32 `json:"flags"`
 	ObjectFlags uint32 `json:"objectFlags,omitempty"`
+	IsTupleType bool   `json:"isTupleType,omitempty"`
 
 	// Value is literal type data. BigInt literals are encoded as signed decimal
 	// strings because JSON cannot represent bigint; absent values are null.
@@ -812,9 +927,10 @@ type TypeResponse struct {
 	LocalTypeParameters []TypeID `json:"localTypeParameters,omitempty"`
 
 	// TupleType data
-	ElementFlags  []checker.ElementFlags `json:"elementFlags,omitempty"`
-	FixedLength   *int                   `json:"fixedLength,omitempty"`
-	TupleReadonly *bool                  `json:"readonly,omitempty"`
+	ElementFlags               []checker.ElementFlags `json:"elementFlags,omitempty"`
+	FixedLength                *int                   `json:"fixedLength,omitempty"`
+	TupleReadonly              *bool                  `json:"readonly,omitempty"`
+	LabeledElementDeclarations []NodeHandle           `json:"labeledElementDeclarations,omitempty"`
 
 	// IndexedAccessType data
 	ObjectType TypeID `json:"objectType,omitzero"`
@@ -880,19 +996,17 @@ func newTypeResponse(t *checker.Type, id TypeID) *TypeResponse {
 		}
 	case flags&checker.TypeFlagsObject != 0:
 		resp.ObjectFlags = uint32(t.ObjectFlags())
+		resp.IsTupleType = checker.IsTupleType(t)
 		objectFlags := t.ObjectFlags()
 		if objectFlags&checker.ObjectFlagsReference != 0 {
-			var ref *checker.TypeReference
-			if objectFlags&checker.ObjectFlagsTuple != 0 {
+			ref := t.AsTypeReference()
+			if checker.IsTupleTypeTarget(t) {
 				tuple := t.AsTupleType()
-				ref = tuple.AsTypeReference()
 				resp.ElementFlags = tuple.ElementFlags()
 				fixedLen := tuple.FixedLength()
 				resp.FixedLength = &fixedLen
 				isReadonly := tuple.IsReadonly()
 				resp.TupleReadonly = &isReadonly
-			} else {
-				ref = t.AsTypeReference()
 			}
 			if ref.Target() != nil {
 				resp.Target = TypeHandle(ref.Target())
@@ -982,6 +1096,75 @@ type GetSourceFileParams struct {
 type GetSourceFileNamesParams struct {
 	Snapshot SnapshotID `json:"snapshot"`
 	Project  ProjectID  `json:"project"`
+}
+
+type GetResolvedModuleParams struct {
+	Snapshot   SnapshotID          `json:"snapshot"`
+	Project    ProjectID           `json:"project"`
+	File       DocumentIdentifier  `json:"file"`
+	ModuleName string              `json:"moduleName"`
+	Mode       core.ResolutionMode `json:"mode"`
+}
+
+type GetResolvedModuleFromModuleSpecifierParams struct {
+	Snapshot        SnapshotID          `json:"snapshot"`
+	Project         ProjectID           `json:"project"`
+	ModuleSpecifier NodeHandle          `json:"moduleSpecifier"`
+	SourceFile      *DocumentIdentifier `json:"sourceFile,omitempty"`
+}
+
+type GetResolvedTypeReferenceDirectiveParams struct {
+	Snapshot          SnapshotID          `json:"snapshot"`
+	Project           ProjectID           `json:"project"`
+	File              DocumentIdentifier  `json:"file"`
+	TypeDirectiveName string              `json:"typeDirectiveName"`
+	Mode              core.ResolutionMode `json:"mode"`
+}
+
+type GetResolvedTypeReferenceDirectiveFromReferenceParams struct {
+	Snapshot          SnapshotID          `json:"snapshot"`
+	Project           ProjectID           `json:"project"`
+	SourceFile        DocumentIdentifier  `json:"sourceFile"`
+	TypeDirectiveName string              `json:"typeDirectiveName"`
+	ResolutionMode    core.ResolutionMode `json:"resolutionMode"`
+}
+
+type PackageId struct {
+	Name             string `json:"name"`
+	SubModuleName    string `json:"subModuleName"`
+	Version          string `json:"version"`
+	PeerDependencies string `json:"peerDependencies"`
+}
+
+func NewPackageId(packageID module.PackageId) *PackageId {
+	if packageID.Name == "" {
+		return nil
+	}
+	return &PackageId{
+		Name:             packageID.Name,
+		SubModuleName:    packageID.SubModuleName,
+		Version:          packageID.Version,
+		PeerDependencies: packageID.PeerDependencies,
+	}
+}
+
+type ResolvedModule struct {
+	ResolvedFileName             string     `json:"resolvedFileName"`
+	OriginalPath                 string     `json:"originalPath,omitempty"`
+	Extension                    string     `json:"extension"`
+	ResolvedUsingTsExtension     bool       `json:"resolvedUsingTsExtension,omitempty"`
+	ResolvedUsingExtraExtensions bool       `json:"resolvedUsingExtraExtensions,omitempty"`
+	PackageId                    *PackageId `json:"packageId,omitempty"`
+	IsExternalLibraryImport      bool       `json:"isExternalLibraryImport,omitempty"`
+	AlternateResult              string     `json:"alternateResult,omitempty"`
+}
+
+type ResolvedTypeReferenceDirective struct {
+	Primary                 bool       `json:"primary"`
+	ResolvedFileName        string     `json:"resolvedFileName"`
+	OriginalPath            string     `json:"originalPath,omitempty"`
+	PackageId               *PackageId `json:"packageId,omitempty"`
+	IsExternalLibraryImport bool       `json:"isExternalLibraryImport,omitempty"`
 }
 
 // SourceFileMetadata carries program-stored metadata about a single source file.
@@ -1301,6 +1484,9 @@ type EmitResponse struct {
 	EmitSkipped  bool                  `json:"emitSkipped"`
 	Diagnostics  []*DiagnosticResponse `json:"diagnostics" nonnil:"true"`
 	EmittedFiles []string              `json:"emittedFiles" nonnil:"true"`
+	// EmittedFilesContents contains contents parallel to EmittedFiles when the
+	// source snapshot uses a full filesystem. It is empty for write-through emits.
+	EmittedFilesContents []string `json:"emittedFilesContents" nonnil:"true"`
 }
 
 type EmitOutputFile struct {
@@ -1419,10 +1605,18 @@ type DiagnosticResponse struct {
 	Pos int `json:"pos"`
 	// End is the end position of the diagnostic in the source file.
 	End int `json:"end"`
+	// StartPosition is the zero-based line and UTF-16 character position of Pos.
+	StartPosition *DiagnosticPositionResponse `json:"startPosition,omitempty"`
+	// EndPosition is the zero-based line and UTF-16 character position of End.
+	EndPosition *DiagnosticPositionResponse `json:"endPosition,omitempty"`
+	// SourceLines contains the source lines needed to render this diagnostic with context.
+	SourceLines []*DiagnosticSourceLineResponse `json:"sourceLines,omitempty"`
 	// Code is the diagnostic error code.
 	Code int32 `json:"code"`
 	// Category is the diagnostic category (error, warning, suggestion, message).
 	Category diagnostics.Category `json:"category"`
+	// Source is a custom diagnostic-code prefix. An empty value uses the default "TS".
+	Source string `json:"source,omitempty"`
 	// Text is the localized diagnostic message text.
 	Text string `json:"text"`
 	// ReportsUnnecessary indicates this diagnostic highlights unnecessary code.
@@ -1435,45 +1629,113 @@ type DiagnosticResponse struct {
 	RelatedInformation []*DiagnosticResponse `json:"relatedInformation,omitempty"`
 }
 
+type DiagnosticPositionResponse struct {
+	Line      int              `json:"line"`
+	Character core.UTF16Offset `json:"character"`
+}
+
+type DiagnosticSourceLineResponse struct {
+	Line int    `json:"line"`
+	Text string `json:"text"`
+}
+
+func diagnosticSourceLines(file diagnosticwriter.FileLike, firstLine int, lastLine int) []*DiagnosticSourceLineResponse {
+	lineMap := file.ECMALineMap()
+	if len(lineMap) == 0 {
+		return nil
+	}
+
+	lines := make([]int, 0, min(lastLine-firstLine+1, 4))
+	if lastLine-firstLine >= 4 {
+		lines = append(lines, firstLine, firstLine+1, lastLine-1, lastLine)
+	} else {
+		for line := firstLine; line <= lastLine; line++ {
+			lines = append(lines, line)
+		}
+	}
+
+	text := file.Text()
+	result := make([]*DiagnosticSourceLineResponse, 0, len(lines))
+	for _, line := range lines {
+		start := int(lineMap[line])
+		end := len(text)
+		if line+1 < len(lineMap) {
+			end = int(lineMap[line+1])
+		}
+		result = append(result, &DiagnosticSourceLineResponse{Line: line, Text: text[start:end]})
+	}
+	return result
+}
+
 // NewDiagnosticResponse converts an ast.Diagnostic to a DiagnosticResponse.
 func NewDiagnosticResponse(d *ast.Diagnostic) *DiagnosticResponse {
-	pos := d.Pos()
-	end := d.End()
+	return newDiagnosticResponse(diagnosticwriter.WrapASTDiagnostic(d))
+}
+
+func newDiagnosticResponse(d *diagnosticwriter.ASTDiagnostic) *DiagnosticResponse {
 	file := d.File()
+	pos, end := d.Pos(), d.End()
 	if file != nil {
-		positionMap := file.GetPositionMap()
-		pos = positionMap.UTF8ToUTF16(pos)
-		end = positionMap.UTF8ToUTF16(end)
+		pos = max(0, min(pos, len(file.Text())))
+		end = max(pos, min(end, len(file.Text())))
 	}
 	resp := &DiagnosticResponse{
 		Pos:                pos,
 		End:                end,
 		Code:               d.Code(),
 		Category:           d.Category(),
+		Source:             d.Source(),
 		Text:               d.Localize(locale.Default),
-		ReportsUnnecessary: d.ReportsUnnecessary(),
-		ReportsDeprecated:  d.ReportsDeprecated(),
+		ReportsUnnecessary: d.Diagnostic.ReportsUnnecessary(),
+		ReportsDeprecated:  d.Diagnostic.ReportsDeprecated(),
 	}
 
 	if file != nil {
 		resp.FileName = file.FileName()
+		if sourceFile, ok := file.(*ast.SourceFile); ok {
+			positionMap := sourceFile.GetPositionMap()
+			resp.Pos = positionMap.UTF8ToUTF16(pos)
+			resp.End = positionMap.UTF8ToUTF16(end)
+		} else {
+			resp.Pos = int(core.UTF16Len(file.Text()[:pos]))
+			resp.End = int(core.UTF16Len(file.Text()[:end]))
+		}
+		startLine, startCharacter := scanner.GetECMALineAndUTF16CharacterOfPosition(file, pos)
+		endLine, endCharacter := scanner.GetECMALineAndUTF16CharacterOfPosition(file, end)
+		resp.StartPosition = &DiagnosticPositionResponse{Line: startLine, Character: startCharacter}
+		resp.EndPosition = &DiagnosticPositionResponse{Line: endLine, Character: endCharacter}
+		resp.SourceLines = diagnosticSourceLines(file, startLine, endLine)
 	}
 
 	if chain := d.MessageChain(); len(chain) > 0 {
 		resp.MessageChain = make([]*DiagnosticResponse, len(chain))
 		for i, c := range chain {
-			resp.MessageChain[i] = NewDiagnosticResponse(c)
+			resp.MessageChain[i] = newDiagnosticResponse(c.(*diagnosticwriter.ASTDiagnostic))
 		}
 	}
 
 	if related := d.RelatedInformation(); len(related) > 0 {
 		resp.RelatedInformation = make([]*DiagnosticResponse, len(related))
 		for i, r := range related {
-			resp.RelatedInformation[i] = NewDiagnosticResponse(r)
+			resp.RelatedInformation[i] = newDiagnosticResponse(r.(*diagnosticwriter.ASTDiagnostic))
 		}
 	}
 
 	return resp
+}
+
+func (d *DiagnosticResponse) ToDiagnostic() *ast.Diagnostic {
+	return ast.NewDiagnosticFromText(
+		nil,
+		core.NewTextRange(d.Pos, d.End),
+		d.Code,
+		d.Category,
+		d.Text,
+		core.Map(d.MessageChain, func(d *DiagnosticResponse) *ast.Diagnostic { return d.ToDiagnostic() }),
+		core.Map(d.RelatedInformation, func(d *DiagnosticResponse) *ast.Diagnostic { return d.ToDiagnostic() }),
+		d.ReportsUnnecessary,
+		d.ReportsDeprecated,
+	)
 }
 
 // NewDiagnosticResponses converts a slice of ast.Diagnostics to DiagnosticResponses.

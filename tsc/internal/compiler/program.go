@@ -43,6 +43,9 @@ type ProgramOptions struct {
 	TypingsLocation             string
 	ProjectName                 string
 	Tracing                     *tracing.Tracing
+	// SkipModuleResolution avoids all module and type reference resolution while
+	// still collecting import metadata needed for emit.
+	SkipModuleResolution bool
 }
 
 func (p *ProgramOptions) canUseProjectReferenceSource() bool {
@@ -2095,8 +2098,12 @@ func (p *Program) GetLibFileFromReference(ref *ast.FileReference) *ast.SourceFil
 }
 
 func (p *Program) GetResolvedTypeReferenceDirectiveFromTypeReferenceDirective(typeRef *ast.FileReference, sourceFile *ast.SourceFile) *module.ResolvedTypeReferenceDirective {
-	if resolutions, ok := p.typeResolutionsInFile[sourceFile.Path()]; ok {
-		if resolved, ok := resolutions[module.ModeAwareCacheKey{Name: typeRef.FileName, Mode: p.getModeForTypeReferenceDirectiveInFile(typeRef, sourceFile)}]; ok {
+	return p.GetResolvedTypeReferenceDirective(sourceFile, typeRef.FileName, p.getModeForTypeReferenceDirectiveInFile(typeRef, sourceFile))
+}
+
+func (p *Program) GetResolvedTypeReferenceDirective(file ast.HasFileName, typeDirectiveName string, mode core.ResolutionMode) *module.ResolvedTypeReferenceDirective {
+	if resolutions, ok := p.typeResolutionsInFile[file.Path()]; ok {
+		if resolved, ok := resolutions[module.ModeAwareCacheKey{Name: typeDirectiveName, Mode: mode}]; ok {
 			return resolved
 		}
 	}
