@@ -18,6 +18,13 @@ on:
 permissions:
   contents: read
 
+# gh resolves its target repository from the git remotes, and prefers a remote
+# named `upstream` over `origin` -- the fork-workflow default, and wrong here:
+# the canary and the port both add microsoft/TypeScript as `upstream`, which
+# silently aimed every gh call at upstream's repo. Pin it explicitly.
+env:
+  GH_REPO: ${{ github.repository }}
+
 concurrency:
   group: tsc-p-release-${{ github.ref }}
   cancel-in-progress: false

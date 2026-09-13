@@ -26,6 +26,13 @@ permissions:
   issues: write # maintain the canary tracking issue
   pull-requests: write # open/update the upstream-sync PR
 
+# gh resolves its target repository from the git remotes, and prefers a remote
+# named `upstream` over `origin` -- the fork-workflow default, and wrong here:
+# the canary and the port both add microsoft/TypeScript as `upstream`, which
+# silently aimed every gh call at upstream's repo. Pin it explicitly.
+env:
+  GH_REPO: ${{ github.repository }}
+
 concurrency:
   group: tsc-p-nightly
   cancel-in-progress: true
@@ -155,8 +162,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh label create nightly-canary --color FBCA04 --description "tsc-p nightly canary against upstream main" --force >/dev/null
-          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
+          gh label create nightly-canary --color FBCA04 --description "tsc-p nightly canary against upstream main" --force >/dev/null 2>&1 || true
+          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$issue" ]; then
             gh issue close "$issue" --comment "Nightly canary is green again against upstream $(git rev-parse --short upstream/main): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
@@ -171,10 +178,11 @@ jobs:
           Upstream commit: ${{ steps.merge.outputs.upstream_sha }}
           Merge conflicts (if any):
           ${{ steps.merge.outputs.conflicts }}"
-          gh label create nightly-canary --color FBCA04 --description "tsc-p nightly canary against upstream main" --force >/dev/null
-          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty')
+          gh label create nightly-canary --color FBCA04 --description "tsc-p nightly canary against upstream main" --force >/dev/null 2>&1 || true
+          issue=$(gh issue list --label nightly-canary --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$issue" ]; then
             gh issue comment "$issue" --body "$body"
           else
-            gh issue create --title "$title" --label nightly-canary --body "$body"
+            gh issue create --title "$title" --label nightly-canary --body "$body" \
+              || gh issue create --title "$title" --body "$body"
           fi

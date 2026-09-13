@@ -32,8 +32,13 @@ concurrency:
   group: tsc-p-release-candidate
   cancel-in-progress: true
 
+# gh resolves its target repository from the git remotes, and prefers a remote
+# named `upstream` over `origin` -- the fork-workflow default, and wrong here:
+# the canary and the port both add microsoft/TypeScript as `upstream`, which
+# silently aimed every gh call at upstream's repo. Pin it explicitly.
 env:
   UPSTREAM_LANE: ts7-release
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   port:
@@ -150,12 +155,13 @@ jobs:
           if the change cannot be expressed as one diff that applies to both
           upstream lanes. Never fix the candidate branch directly — it is
           force-rebuilt on the next run."
-          gh label create release-candidate --color 0E8A16 --description "tsc-p release-candidate port status" --force >/dev/null
-          existing=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty')
+          gh label create release-candidate --color 0E8A16 --description "tsc-p release-candidate port status" --force >/dev/null 2>&1 || true
+          existing=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
           else
-            gh issue create --title "$title" --label release-candidate --body "$body"
+            gh issue create --title "$title" --label release-candidate --body "$body" \
+              || gh issue create --title "$title" --body "$body"
           fi
 
       - name: Close the tracking issue once the port is healthy again
@@ -163,8 +169,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh label create release-candidate --color 0E8A16 --description "tsc-p release-candidate port status" --force >/dev/null
-          issue=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty')
+          gh label create release-candidate --color 0E8A16 --description "tsc-p release-candidate port status" --force >/dev/null 2>&1 || true
+          issue=$(gh issue list --label release-candidate --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$issue" ]; then
             gh issue close "$issue" --comment "Port is clean again: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi

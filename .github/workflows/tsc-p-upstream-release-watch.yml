@@ -19,6 +19,13 @@ permissions:
   contents: read
   issues: write
 
+# gh resolves its target repository from the git remotes, and prefers a remote
+# named `upstream` over `origin` -- the fork-workflow default, and wrong here:
+# the canary and the port both add microsoft/TypeScript as `upstream`, which
+# silently aimed every gh call at upstream's repo. Pin it explicitly.
+env:
+  GH_REPO: ${{ github.repository }}
+
 jobs:
   watch:
     runs-on: ubuntu-24.04
@@ -49,8 +56,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           title="Upstream TypeScript ${{ steps.compare.outputs.latest }} released"
-          gh label create upstream-release --color 1D76DB --description "A new upstream TypeScript release to pin" --force >/dev/null
-          existing=$(gh issue list --label upstream-release --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          gh label create upstream-release --color 1D76DB --description "A new upstream TypeScript release to pin" --force >/dev/null 2>&1 || true
+          existing=$(gh issue list --label upstream-release --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$existing" ]; then
             echo "issue #$existing already tracks this release"
             exit 0
