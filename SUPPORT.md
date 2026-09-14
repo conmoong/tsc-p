@@ -1,11 +1,36 @@
 # Support
 
-## How to file issues and get help
+tsc-p is an unofficial, independent fork of
+[microsoft/TypeScript](https://github.com/microsoft/TypeScript)'s `tsc/` native
+compiler. It is **not** affiliated with or endorsed by Microsoft, and Microsoft
+does not support it.
 
-This project uses GitHub issues to track bugs and feature requests. Please search the [existing issues](https://github.com/microsoft/TypeScript/issues) before filing new issues to avoid duplicates. For new issues, file your bug or feature request as a new issue.
+## Where to ask
 
-For help and questions about using this project, please see the [`typescript` label on Stack Overflow](https://stackoverflow.com/questions/tagged/typescript) or the [`#typescript` channel on Discord](https://discord.com/invite/typescript).
+**Is it about the compiler itself?** If the same thing happens with plain
+upstream `tsc` — a type error, an emit difference, a crash with no tsc-p plugin
+configured — it is an upstream question. Search and report it at
+[microsoft/TypeScript/issues](https://github.com/microsoft/TypeScript/issues).
+Please don't send upstream compiler questions here; we cannot fix them, and
+reporting them upstream helps everyone.
 
-## Microsoft Support Policy
+A quick way to tell: run the same project through the matching upstream
+release. If it reproduces there, it is upstream's.
 
-TypeScript releases may include new features, fixes (security and/or non-security), or a combination of both. Some critical issues may be fixed in a servicing update to the latest release. When included with a Microsoft product, TypeScript support and servicing is offered under the [Modern Support Policy](https://learn.microsoft.com/lifecycle/policies/modern). For Visual Studio, servicing fixes are limited to security fixes for versions of TypeScript included in under-support releases of Visual Studio. Community support for this project is limited to the resources listed above. Assisted support is available from a professional support engineer by opening a ticket with the [Microsoft assisted support team](https://support.serviceshub.microsoft.com/supportforbusiness/onboarding).
+**Is it about tsc-p?** Anything involving `compilerOptions.plugins` and the
+plugins tsc-p adds (`@conmoong/path-rewrite`, `@conmoong/bouncer`,
+`@conmoong/paris`, `@conmoong/pure`, `@conmoong/graph`), the `@conmoong/*` npm
+packages, the launcher, or the WASI fallback belongs
+[here](https://github.com/conmoong/tsc-p/issues).
+
+**Security vulnerabilities** — see [SECURITY.md](SECURITY.md). Do not open a
+public issue.
+
+## Documentation
+
+- [README.md](README.md) — what tsc-p is and how each plugin is configured
+- [tsc-p/docs/BUILDING.md](tsc-p/docs/BUILDING.md) — building and testing
+- [tsc-p/docs/RELEASING.md](tsc-p/docs/RELEASING.md) — versioning and releases
+- [tsc-p/docs/UPSTREAM-SYNC.md](tsc-p/docs/UPSTREAM-SYNC.md) — how the fork tracks upstream
+
+This is a small project maintained in spare time. There is no SLA.

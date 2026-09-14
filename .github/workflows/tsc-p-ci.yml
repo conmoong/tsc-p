@@ -1,0 +1,101 @@
+# tsc-p CI: build the compiler, run the Go and launcher test suites, and
+# smoke-test packaging on the current platform. This workflow is specific to
+# the tsc-p fork; the upstream ci.yml is disabled in the repository's
+# Actions settings (a repo setting, not a file change).
+
+name: tsc-p CI
+
+on:
+  push:
+    branches:
+      - dev
+      - release-candidate
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tsc-p-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Cross-compile all targets
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+          
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tsc/go.mod
+          cache: true
+          cache-dependency-path: tsc/go.sum
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Go test
+        run: npm run tscp:test:go
+
+      - name: Npm test
+        run: npm run tscp:test:launcher
+
+      - name: Build
+        run: npm run tscp:build
+
+      - name: Package
+        run: npm run tscp:package
+
+      - name: Verify package manifests and tarball contents
+        run: npm run tscp:verify-packages
+
+      - name: Upload artifacts for testing
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tsc-p
+          path: built/tscp
+          if-no-files-found: error
+
+  manifest:
+    name: Read manifest
+    runs-on: ubuntu-24.04
+    outputs:
+      platforms: ${{ steps.platforms.outputs.platforms }}
+    steps:      
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Read platforms matrix from the manifest
+        id: platforms
+        run: echo "platforms=$(node tsc-p/scripts/readManifest.mjs)" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test ${{ matrix.platform.name }}
+    needs: [manifest, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.manifest.outputs.platforms) }}      
+    runs-on: ${{ matrix.platform.ghActionRunner }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Download artifacts          
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tsc-p
+          path: built/tscp
+
+      - name: Executable test
+        run: npm run tscp:test:bin
+
+      - name: Clean-install smoke test
+        run: npm run tscp:test:smoke
+

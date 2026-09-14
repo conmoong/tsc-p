@@ -1,0 +1,123 @@
+diff --git a/tsc/internal/tscp/bouncer_emit_test.go b/tsc/internal/tscp/bouncer_emit_test.go
+index 48839b1a1a..13fa9c6d16 100644
+--- a/tsc/internal/tscp/bouncer_emit_test.go
++++ b/tsc/internal/tscp/bouncer_emit_test.go
+@@ -44,14 +44,14 @@ func emitBouncerProject(t *testing.T, files map[string]string, plugins []hooks.E
+ 	fs := vfstest.FromMap(files, true /*useCaseSensitiveFileNames*/)
+ 	fs = bundled.WrapFS(fs)
+ 
+-	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil, nil)
++	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil)
+ 	if plugins != nil {
+ 		host = &pluginCompilerHost{CompilerHost: host, plugins: plugins}
+ 	}
+ 
+ 	program := compiler.NewProgram(compiler.ProgramOptions{
+ 		Config: &tsoptions.ParsedCommandLine{
+-			ParsedConfig: &tsoptions.ParsedOptions{
++			ParsedConfig: &core.ParsedOptions{
+ 				FileNames:       []string{"/src/index.ts"},
+ 				CompilerOptions: bouncerOptions(),
+ 			},
+diff --git a/tsc/internal/tscp/emit_test.go b/tsc/internal/tscp/emit_test.go
+index 93b99238ca..2631a1fd50 100644
+--- a/tsc/internal/tscp/emit_test.go
++++ b/tsc/internal/tscp/emit_test.go
+@@ -101,7 +101,7 @@ func emitFixture(t *testing.T, files map[string]string, options *core.CompilerOp
+ 	fs := vfstest.FromMap(files, true /*useCaseSensitiveFileNames*/)
+ 	fs = bundled.WrapFS(fs)
+ 
+-	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil, nil)
++	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil)
+ 	if len(plugins) > 0 {
+ 		host = &pluginCompilerHost{CompilerHost: host, plugins: plugins}
+ 	}
+@@ -115,7 +115,7 @@ func emitFixture(t *testing.T, files map[string]string, options *core.CompilerOp
+ 
+ 	program := compiler.NewProgram(compiler.ProgramOptions{
+ 		Config: &tsoptions.ParsedCommandLine{
+-			ParsedConfig: &tsoptions.ParsedOptions{
++			ParsedConfig: &core.ParsedOptions{
+ 				FileNames:       fileNames,
+ 				CompilerOptions: options,
+ 			},
+diff --git a/tsc/internal/tscp/graph_emit_test.go b/tsc/internal/tscp/graph_emit_test.go
+index bff653c120..4f7308dbe3 100644
+--- a/tsc/internal/tscp/graph_emit_test.go
++++ b/tsc/internal/tscp/graph_emit_test.go
+@@ -61,7 +61,7 @@ func emitGraphFixture(t *testing.T, sources map[string]string, config map[string
+ 	fs := vfstest.FromMap(sources, true /*useCaseSensitiveFileNames*/)
+ 	fs = bundled.WrapFS(fs)
+ 
+-	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil, nil)
++	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil)
+ 	host = &pluginCompilerHost{CompilerHost: host, plugins: []hooks.EmitPlugin{graphPlugin(t, config)}}
+ 
+ 	options := baseOptions()
+@@ -69,7 +69,7 @@ func emitGraphFixture(t *testing.T, sources map[string]string, config map[string
+ 
+ 	program := compiler.NewProgram(compiler.ProgramOptions{
+ 		Config: &tsoptions.ParsedCommandLine{
+-			ParsedConfig: &tsoptions.ParsedOptions{
++			ParsedConfig: &core.ParsedOptions{
+ 				FileNames:       fileNames,
+ 				CompilerOptions: options,
+ 			},
+diff --git a/tsc/internal/tscp/paris_emit_test.go b/tsc/internal/tscp/paris_emit_test.go
+index d4c831e230..98b27e2f9e 100644
+--- a/tsc/internal/tscp/paris_emit_test.go
++++ b/tsc/internal/tscp/paris_emit_test.go
+@@ -98,7 +98,7 @@ func emitParis(t *testing.T, sources map[string]string, define map[string]any) (
+ 	fs := vfstest.FromMap(files, true /*useCaseSensitiveFileNames*/)
+ 	fs = bundled.WrapFS(fs)
+ 
+-	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil, nil)
++	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil)
+ 	host = &pluginCompilerHost{CompilerHost: host, plugins: []hooks.EmitPlugin{parisPlugin(t, define)}}
+ 
+ 	options := baseOptions()
+@@ -106,7 +106,7 @@ func emitParis(t *testing.T, sources map[string]string, define map[string]any) (
+ 
+ 	program := compiler.NewProgram(compiler.ProgramOptions{
+ 		Config: &tsoptions.ParsedCommandLine{
+-			ParsedConfig: &tsoptions.ParsedOptions{
++			ParsedConfig: &core.ParsedOptions{
+ 				FileNames:       fileNames,
+ 				CompilerOptions: options,
+ 			},
+diff --git a/tsc/internal/tscp/pathrewrite_emit_test.go b/tsc/internal/tscp/pathrewrite_emit_test.go
+index 64369f3b0f..072d23ca70 100644
+--- a/tsc/internal/tscp/pathrewrite_emit_test.go
++++ b/tsc/internal/tscp/pathrewrite_emit_test.go
+@@ -100,14 +100,14 @@ func emitAliasProjectWithRaw(t *testing.T, files map[string]string, options *cor
+ 	fs := vfstest.FromMap(files, true /*useCaseSensitiveFileNames*/)
+ 	fs = bundled.WrapFS(fs)
+ 
+-	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil, nil)
++	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil)
+ 	if plugins != nil {
+ 		host = &pluginCompilerHost{CompilerHost: host, plugins: plugins}
+ 	}
+ 
+ 	program := compiler.NewProgram(compiler.ProgramOptions{
+ 		Config: &tsoptions.ParsedCommandLine{
+-			ParsedConfig: &tsoptions.ParsedOptions{
++			ParsedConfig: &core.ParsedOptions{
+ 				FileNames:       []string{"/src/index.ts"},
+ 				CompilerOptions: options,
+ 			},
+@@ -235,12 +235,12 @@ declare global {
+ 
+ 	fs := vfstest.FromMap(files, true /*useCaseSensitiveFileNames*/)
+ 	fs = bundled.WrapFS(fs)
+-	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil, nil)
++	var host compiler.CompilerHost = compiler.NewCompilerHost("/src", fs, bundled.LibPath(), nil, nil)
+ 	host = &pluginCompilerHost{CompilerHost: host, plugins: hostPlugins}
+ 
+ 	program := compiler.NewProgram(compiler.ProgramOptions{
+ 		Config: &tsoptions.ParsedCommandLine{
+-			ParsedConfig: &tsoptions.ParsedOptions{
++			ParsedConfig: &core.ParsedOptions{
+ 				FileNames:       []string{"/src/index.tsx"},
+ 				CompilerOptions: options,
+ 			},

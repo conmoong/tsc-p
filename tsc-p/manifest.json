@@ -1,0 +1,99 @@
+{
+    "$comment": "Single source of truth for tsc-p releases. Version, the pinned upstream revision and the target matrix are all defined here and consumed by the scripts in tsc-p/scripts and the tsc-p GitHub workflows. Package names and the repository URL are deliberately not here -- they're hardcoded literals in tsc-p/scripts/*.mjs and the packages/tsc-p*/package.json templates (see AGENTS.md's \"tsc-p: npm distribution layer\" section). A git tag vX.Y.Z must equal .version exactly. Versioning policy: .version may only be a stable X.Y.Z when upstream.tag is a real, resolvable tag on upstream.repository; whenever upstream.tag is null (tracking a commit on upstream's main that has no stable release tag yet), .version must carry a prerelease suffix (X.Y.Z-<prerelease>, e.g. 0.2.0-rc.1) and publishes under the npm 'next' dist-tag, never 'latest'.",
+    "version": "0.2.0-edge.20260824",
+    "typescriptVersion": "7.0.2",
+    "upstream": {
+        "repository": "https://github.com/microsoft/TypeScript",
+        "tag": null,
+        "commit": "b99c439debe1f6a8765e877c3753620f8afb4f3e"
+    },
+    "goVersion": "1.26",
+    "platforms": [
+        {
+            "name": "darwin/arm64",
+            "nodejsPlatform": "darwin",
+            "nodejsArch": "arm64",
+            "ghActionRunner": "macos-14"
+        },
+        {
+            "name": "darwin/x64",
+            "nodejsPlatform": "darwin",
+            "nodejsArch": "x64",
+            "ghActionRunner": "macos-15-intel"
+        },
+        {
+            "name": "linux/arm64",
+            "nodejsPlatform": "linux",
+            "nodejsArch": "arm64",
+            "ghActionRunner": "ubuntu-24.04-arm"
+        },
+        {
+            "name": "linux/x64",
+            "nodejsPlatform": "linux",
+            "nodejsArch": "x64",
+            "ghActionRunner": "ubuntu-24.04"
+        },
+        {
+            "name": "win32/arm64",
+            "nodejsPlatform": "win32",
+            "nodejsArch": "arm64",
+            "ghActionRunner": "windows-11-arm"
+        },
+        {
+            "name": "win32/x64",
+            "nodejsPlatform": "win32",
+            "nodejsArch": "x64",
+            "ghActionRunner": "windows-2025"
+        }
+    ],
+    "goTargets": [
+        {
+            "name": "darwin/arm64",
+            "type": "native",
+            "goOs": "darwin",
+            "goArch": "arm64",
+            "platform": "darwin/arm64"
+        },
+        {
+            "name": "darwin/amd64",
+            "type": "native",
+            "goOs": "darwin",
+            "goArch": "amd64",
+            "platform": "darwin/x64"
+        },
+        {
+            "name": "linux/arm64",
+            "type": "native",
+            "goOs": "linux",
+            "goArch": "arm64",
+            "platform": "linux/arm64"
+        },
+        {
+            "name": "linux/amd64",
+            "type": "native",
+            "goOs": "linux",
+            "goArch": "amd64",
+            "platform": "linux/x64"
+        },
+        {
+            "name": "windows/arm64",
+            "type": "native",
+            "goOs": "windows",
+            "goArch": "arm64",
+            "platform": "win32/arm64"
+        },
+        {
+            "name": "windows/amd64",
+            "type": "native",
+            "goOs": "windows",
+            "goArch": "amd64",
+            "platform": "win32/x64"
+        },
+        {
+            "name": "wasi",
+            "type": "wasm",
+            "goOs": "wasip1",
+            "goArch": "wasm"
+        }
+    ]
+}

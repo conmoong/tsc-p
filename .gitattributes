@@ -2,3 +2,32 @@
 **/*.json linguist-language=jsonc
 * -text
 *.go text eol=lf
+
+# tsc-p: always keep the fork README when merging upstream
+# (one-time per clone: git config merge.ours.driver true)
+README.md merge=ours
+
+# tsc-p: project-identity docs. Upstream's versions are Microsoft's and are
+# wrong — actively so for SECURITY.md, which would route tsc-p vulnerability
+# reports to MSRC, who neither maintain this software nor can act on them, and
+# for CONTRIBUTING.md, which asks for a Microsoft CLA that does not apply here.
+# These are replaced wholesale rather than patched, so upstream's edits to them
+# are never interesting to us; keep ours unconditionally on every merge.
+#
+# NOTICE.txt is deliberately NOT in this list: Apache-2.0 §4(d) requires
+# derivative works to carry the upstream NOTICE, so it stays untouched and
+# upstream's changes to it must flow through. LICENSE.txt likewise.
+CODE_OF_CONDUCT.md merge=ours
+CONTRIBUTING.md merge=ours
+SECURITY.md merge=ours
+SUPPORT.md merge=ours
+
+# tsc-p: Herebyfile.mjs's release-profile pin (nativePreviewReleaseVersion,
+# produceNativePreviewVsix, produceTypeScriptNightlyVsix) permanently
+# diverges from whatever upstream main is currently prepping (e.g. the next
+# release's nightly builds) — that's expected, not a real conflict to
+# resolve. Keeping dev's version avoids the nightly canary tripping on this
+# every single night while it still merges everything else from upstream
+# normally. A real, deliberate stable-tag re-pin is done by hand without
+# this driver configured, so it still sees and resolves this properly.
+Herebyfile.mjs merge=ours

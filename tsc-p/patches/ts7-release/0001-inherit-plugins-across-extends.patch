@@ -1,0 +1,152 @@
+diff --git a/tsc/internal/tsoptions/tsconfigparsing.go b/tsc/internal/tsoptions/tsconfigparsing.go
+index cee44d8a1e..0a4b2c2e83 100644
+--- a/tsc/internal/tsoptions/tsconfigparsing.go
++++ b/tsc/internal/tsoptions/tsconfigparsing.go
+@@ -27,6 +27,7 @@ type extendsResult struct {
+ 	include             []any
+ 	exclude             []any
+ 	files               []any
++	plugins             []any
+ 	compileOnSave       bool
+ 	extendedSourceFiles collections.Set[string]
+ }
+@@ -1128,6 +1129,18 @@ func parseConfig(
+ 					result.compileOnSave = compileOnSave
+ 				}
+ 			}
++			// compilerOptions.plugins has no field on core.CompilerOptions -- it is
++			// carried purely as raw JSON -- so mergeCompilerOptions below never
++			// brings it across `extends` the way it does typed options. Collect it
++			// here so a plugins array declared only in a base config stays visible
++			// to consumers reading ParsedCommandLine.Raw.
++			if extendedRawMap, ok := extendsRaw.(*collections.OrderedMap[string, any]); ok {
++				if extendedCompilerOptions, ok := extendedRawMap.GetOrZero("compilerOptions").(*collections.OrderedMap[string, any]); ok {
++					if plugins, ok := extendedCompilerOptions.GetOrZero("plugins").([]any); ok {
++						result.plugins = plugins
++					}
++				}
++			}
+ 			mergeCompilerOptions(result.options, extendedConfig.options, extendsRaw)
+ 		}
+ 	}
+@@ -1154,6 +1167,17 @@ func parseConfig(
+ 		if result.files != nil {
+ 			ownConfig.raw.(*collections.OrderedMap[string, any]).Set("files", result.files)
+ 		}
++		if result.plugins != nil {
++			ownRawMap := ownConfig.raw.(*collections.OrderedMap[string, any])
++			ownCompilerOptions, ok := ownRawMap.GetOrZero("compilerOptions").(*collections.OrderedMap[string, any])
++			if !ok {
++				ownCompilerOptions = collections.NewOrderedMapWithSizeHint[string, any](1)
++				ownRawMap.Set("compilerOptions", ownCompilerOptions)
++			}
++			if !ownCompilerOptions.Has("plugins") {
++				ownCompilerOptions.Set("plugins", result.plugins)
++			}
++		}
+ 		if result.compileOnSave && !ownConfig.raw.(*collections.OrderedMap[string, any]).Has("compileOnSave") {
+ 			ownConfig.raw.(*collections.OrderedMap[string, any]).Set("compileOnSave", result.compileOnSave)
+ 		}
+diff --git a/tsc/internal/tsoptions/tsconfigparsing_test.go b/tsc/internal/tsoptions/tsconfigparsing_test.go
+index 3ba6431a67..9d9804c1fe 100644
+--- a/tsc/internal/tsoptions/tsconfigparsing_test.go
++++ b/tsc/internal/tsoptions/tsconfigparsing_test.go
+@@ -9,6 +9,7 @@ import (
+ 	"testing"
+ 
+ 	"github.com/microsoft/TypeScript/tsc/internal/ast"
++	"github.com/microsoft/TypeScript/tsc/internal/collections"
+ 	"github.com/microsoft/TypeScript/tsc/internal/core"
+ 	"github.com/microsoft/TypeScript/tsc/internal/diagnostics"
+ 	"github.com/microsoft/TypeScript/tsc/internal/diagnosticwriter"
+@@ -1340,3 +1341,90 @@ func TestExtendedConfigConfigDirPathsAreNotCached(t *testing.T) {
+ 	paths := parseConfig("/packages/b/tsconfig.json").CompilerOptions().Paths
+ 	assert.DeepEqual(t, paths.GetOrZero("@pkg/*"), []string{"/packages/b/src/*"})
+ }
++
++func TestExtendedConfigInheritsCompilerOptionsPlugins(t *testing.T) {
++	t.Parallel()
++
++	pluginNames := func(parsed *tsoptions.ParsedCommandLine) []string {
++		rawMap, ok := parsed.Raw.(*collections.OrderedMap[string, any])
++		assert.Assert(t, ok, "expected raw config to be an OrderedMap")
++		compilerOptions, ok := rawMap.GetOrZero("compilerOptions").(*collections.OrderedMap[string, any])
++		assert.Assert(t, ok, "expected compilerOptions to be an OrderedMap")
++		plugins, ok := compilerOptions.GetOrZero("plugins").([]any)
++		assert.Assert(t, ok, "expected compilerOptions.plugins to be an array")
++		names := make([]string, 0, len(plugins))
++		for _, plugin := range plugins {
++			entry, ok := plugin.(*collections.OrderedMap[string, any])
++			assert.Assert(t, ok, "expected a plugin entry to be an OrderedMap")
++			name, ok := entry.GetOrZero("name").(string)
++			assert.Assert(t, ok, "expected a plugin entry to have a string name")
++			names = append(names, name)
++		}
++		return names
++	}
++
++	parse := func(t *testing.T, files map[string]string) *tsoptions.ParsedCommandLine {
++		t.Helper()
++		host := tsoptionstest.NewVFSParseConfigHost(files, "/", true /*useCaseSensitiveFileNames*/)
++		parsed, errors := tsoptions.GetParsedCommandLineOfConfigFile("/tsconfig.json", nil, nil, host, &memoCache{})
++		assert.Assert(t, len(errors) == 0, "unexpected errors: %v", errors)
++		return parsed
++	}
++
++	t.Run("inherited when the child declares none", func(t *testing.T) {
++		t.Parallel()
++		parsed := parse(t, map[string]string{
++			"/tsconfig.base.json": `{
++  "compilerOptions": { "plugins": [{ "name": "base-plugin" }] }
++}`,
++			"/tsconfig.json": `{
++  "extends": "./tsconfig.base.json",
++  "compilerOptions": { "module": "nodenext" }
++}`,
++			"/index.ts": "export {}",
++		})
++		assert.DeepEqual(t, pluginNames(parsed), []string{"base-plugin"})
++	})
++
++	t.Run("inherited when the child declares no compilerOptions at all", func(t *testing.T) {
++		t.Parallel()
++		parsed := parse(t, map[string]string{
++			"/tsconfig.base.json": `{
++  "compilerOptions": { "plugins": [{ "name": "base-plugin" }] }
++}`,
++			"/tsconfig.json": `{ "extends": "./tsconfig.base.json" }`,
++			"/index.ts":      "export {}",
++		})
++		assert.DeepEqual(t, pluginNames(parsed), []string{"base-plugin"})
++	})
++
++	t.Run("the child's own plugins win", func(t *testing.T) {
++		t.Parallel()
++		parsed := parse(t, map[string]string{
++			"/tsconfig.base.json": `{
++  "compilerOptions": { "plugins": [{ "name": "base-plugin" }] }
++}`,
++			"/tsconfig.json": `{
++  "extends": "./tsconfig.base.json",
++  "compilerOptions": { "plugins": [{ "name": "child-plugin" }] }
++}`,
++			"/index.ts": "export {}",
++		})
++		assert.DeepEqual(t, pluginNames(parsed), []string{"child-plugin"})
++	})
++
++	t.Run("the last extends entry wins", func(t *testing.T) {
++		t.Parallel()
++		parsed := parse(t, map[string]string{
++			"/first.json": `{
++  "compilerOptions": { "plugins": [{ "name": "first-plugin" }] }
++}`,
++			"/second.json": `{
++  "compilerOptions": { "plugins": [{ "name": "second-plugin" }] }
++}`,
++			"/tsconfig.json": `{ "extends": ["./first.json", "./second.json"] }`,
++			"/index.ts":      "export {}",
++		})
++		assert.DeepEqual(t, pluginNames(parsed), []string{"second-plugin"})
++	})
++}

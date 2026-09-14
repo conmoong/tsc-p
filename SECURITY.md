@@ -1,39 +1,47 @@
-<!-- BEGIN MICROSOFT SECURITY.MD V0.0.9 BLOCK -->
+# Security
 
-## Security
+tsc-p is an unofficial, independent fork of
+[microsoft/TypeScript](https://github.com/microsoft/TypeScript)'s `tsc/` native
+compiler. It is **not** affiliated with or endorsed by Microsoft. **Do not
+report tsc-p vulnerabilities to Microsoft or to MSRC** — they do not maintain
+this software and cannot act on such a report.
 
-Microsoft takes the security of our software products and services seriously, which includes all source code repositories managed through our GitHub organizations.
+## Reporting a vulnerability
 
-If you believe you have found a security vulnerability in any Microsoft-owned repository that meets [Microsoft's definition of a security vulnerability](https://aka.ms/security.md/definition), please report it to us as described below.
+**Please do not open a public issue.**
 
-## Reporting Security Issues
+Report privately through
+[GitHub Security Advisories](https://github.com/conmoong/tsc-p/security/advisories/new).
+That channel is visible only to the maintainers and lets us prepare a fix
+before anything is disclosed.
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+Please include what you can: affected version (`tsc-p --version` and the
+`@conmoong/*` package version), platform, a minimal reproduction, and the
+impact you believe it has. This is a small project maintained in spare time —
+there is no guaranteed response window, though reports are taken seriously.
 
-Instead, please report them to the Microsoft Security Response Center (MSRC) at [https://msrc.microsoft.com/create-report](https://aka.ms/security.md/msrc/create-report).
+## Does it belong here or upstream?
 
-You should receive a response within 24 hours. If for some reason you do not, please follow up using the messaging functionality found at the bottom of the Activity tab on your vulnerability report on [https://msrc.microsoft.com/report/vulnerability](https://msrc.microsoft.com/report/vulnerability/) or via email as described in the instructions at the bottom of [https://msrc.microsoft.com/create-report](https://aka.ms/security.md/msrc/create-report). Additional information can be found at [microsoft.com/msrc](https://www.microsoft.com/msrc) or on MSRC's [FAQ page for reporting an issue](https://www.microsoft.com/en-us/msrc/faqs-report-an-issue).
+tsc-p only adds a compiled-in emit-plugin hook and an npm distribution layer;
+everything else is upstream TypeScript.
 
-Please include the requested information listed below (as much as you can provide) to help us better understand the nature and scope of the possible issue:
+- **Reproduces with plain upstream `tsc`** (no tsc-p plugin configured) → it is
+  an upstream vulnerability. Report it to the
+  [Microsoft Security Response Center](https://msrc.microsoft.com/create-report),
+  which is the correct channel and is monitored properly. Telling us too is
+  welcome so we can pick up the fix, but MSRC should get it first.
+- **Requires tsc-p** — one of its plugins, the launcher, the `@conmoong/*`
+  packages, or the WASI fallback → report it here.
 
-  * Type of issue (e.g. buffer overflow, SQL injection, cross-site scripting, etc.)
-  * Full paths of source file(s) related to the manifestation of the issue
-  * The location of the affected source code (tag/branch/commit or direct URL)
-  * Any special configuration required to reproduce the issue
-  * Step-by-step instructions to reproduce the issue
-  * Proof-of-concept or exploit code (if possible)
-  * Impact of the issue, including how an attacker might exploit the issue
+If you are unsure, report it here and we will help route it.
 
-This information will help us triage your report more quickly.
+## Scope
 
-If you are reporting for a bug bounty, more complete reports can contribute to a higher bounty award. Please visit our [Microsoft Bug Bounty Program](https://aka.ms/security.md/msrc/bounty) page for more details about our active programs.
+In scope: the tsc-p plugins, the launcher and platform packages, the WASI
+fallback, and the release/publish pipeline (for example a supply-chain issue in
+how packages are built or published).
 
-## Preferred Languages
-
-We prefer all communications to be in English.
-
-## Policy
-
-Microsoft follows the principle of [Coordinated Vulnerability Disclosure](https://aka.ms/security.md/cvd).
-
-<!-- END MICROSOFT SECURITY.MD BLOCK -->
+Out of scope: vulnerabilities in upstream TypeScript reachable without tsc-p
+(report upstream), and issues in the separate `@conmoong/paris`,
+`@conmoong/graph-validate` and `@conmoong/teo` repositories (report in those
+repositories).
