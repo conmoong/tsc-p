@@ -6,7 +6,7 @@ snapshot of an actively moving target — it separates **what is verifiable in
 the tree today** from **what is planned** from **what is inference**. Re-check
 before relying on any of it.
 
-*Last reviewed: 2026-09-13, against `upstream/main` @ `879f9867ac`.*
+*Last reviewed: 2026-09-20, against `upstream/main` @ `f29aeb9f82`.*
 
 ## The thesis
 
@@ -83,10 +83,29 @@ type EmitOutputFile struct {
 ```
 
 Text, not an AST — which is to say, the string you would get by running the
-compiler. `printNode` meanwhile takes `Data string // base64-encoded binary AST
-data` with **no JS/declaration discriminator**, so the write half is
-kind-agnostic. There is no node-factory method in the protocol: no
-`createNode`, `updateNode`, or equivalent.
+compiler. Everything *around* that read, however, is in place:
+
+- **`printNode` takes `Data string // base64-encoded binary AST data`** with no
+  JS/declaration discriminator, and `printFile` sends a whole encoded
+  `SourceFile` through it. The decoder reconstructs source-file metadata —
+  `IsDeclarationFile`, `languageVariant`, `scriptKind` — so declaration files
+  round-trip specifically.
+- **A full node factory, client-side.** `packages/typescript/src/ast/` carries a
+  6,000-line generated `factory.generated.ts`, a visitor, and `clone`, all
+  published from the `typescript` package as `unstable/ast`,
+  `unstable/ast/factory`, `unstable/ast/visitor`, `unstable/ast/clone`. The
+  factory belongs on the client by design: nodes are built in JS, encoded, and
+  shipped, so it was never going to be a protocol method.
+- **`createSourceFile` / `createSourceFileFromFile`** parse text into an AST.
+
+The consequence is that a transformer can be assembled **today**, without
+upstream adding anything: `getDeclarationEmit` → `createSourceFile` on the
+returned text → visit and rebuild with the factory → `printFile`. What is
+missing is not the toolkit but the *direct* emit-AST read; going through text
+means re-parsing, which is precisely where 3C's emit-node metadata caveat
+bites. Whether the resulting `.d.ts` preserves JSDoc and formatting acceptably
+is unmeasured, and is the question worth answering before assuming this gap
+still protects anything.
 
 ### Content mappers (shipped)
 
@@ -327,7 +346,7 @@ behind it at runtime. Bouncer is only correct where one tool owns both outputs.
 | Signal | Why it matters |
 |---|---|
 | `EmitOutputFile` gaining a node handle instead of `Text string` | **The single earliest indicator.** The round trip is blocked on this one change, and it is kind-agnostic — a one-line diff in `tsc/internal/api/proto.go` |
-| A node-factory method appearing in the protocol | Transformers being taken seriously as a first-class path |
+| `unstable/ast` losing its `unstable` prefix | The transformer toolkit becoming a supported surface rather than an experiment |
 | `printNode` gaining emit-node metadata fields | Upstream solving the fidelity problem, which is the fallback technical argument |
 | Any `declarationMap` story for client-transformed ASTs | The remaining design blocker |
 | ttsc shipping a declaration plugin hook | More likely, and sooner, than upstream shipping the round trip |
