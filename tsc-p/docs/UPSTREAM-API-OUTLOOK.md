@@ -101,11 +101,34 @@ compiler. Everything *around* that read, however, is in place:
 The consequence is that a transformer can be assembled **today**, without
 upstream adding anything: `getDeclarationEmit` → `createSourceFile` on the
 returned text → visit and rebuild with the factory → `printFile`. What is
-missing is not the toolkit but the *direct* emit-AST read; going through text
-means re-parsing, which is precisely where 3C's emit-node metadata caveat
-bites. Whether the resulting `.d.ts` preserves JSDoc and formatting acceptably
-is unmeasured, and is the question worth answering before assuming this gap
-still protects anything.
+missing is not the toolkit but the *direct* emit-AST read.
+
+**Measured, not assumed.** Round-tripping a JSDoc-heavy `.d.ts` through
+`createSourceFile` → `printFile`:
+
+- **Comments survive re-parse intact** — `@param`, `@returns`, `@throws`,
+  `{@link}`, fenced code samples, `@deprecated`, and trailing line comments all
+  come back verbatim. Re-parsing does *not* mangle documentation, so a fidelity
+  argument resting on JSDoc loss does not hold.
+- **Vertical formatting does not.** Every blank line between declarations is
+  dropped, and some types are reflowed (a tuple in a type argument explodes
+  across lines). For a published `.d.ts` that is a real readability regression,
+  though a cosmetic one.
+- `preserveSourceNewlines: true` makes it worse rather than better: it does not
+  restore the blank lines and it duplicates the leading comment block.
+- **A transform currently corrupts the output.** `updateSourceFile` followed by
+  `printFile` emits the file's leading comment block a second time, orphaned at
+  end of file — with the *unchanged* statement array, so merely reconstructing
+  the file triggers it. Minimal repro: `createSourceFile("/** Doc. */\nexport
+  declare const a: number;\n")`, `updateSourceFile` with its own statements,
+  `printFile` → the doc comment is emitted twice.
+
+That last one is a bug and will be fixed; it is not an architectural limit and
+should not be leaned on. The durable difference is narrower: **tsc-p transforms
+inside the pipeline before the declaration printer runs**, so it never
+reconstructs a tree from text and its output for untouched declarations is
+byte-identical to unpatched upstream — which the nightly canary verifies
+continuously. Formatting, not documentation, is what the round trip costs.
 
 ### Content mappers (shipped)
 
@@ -253,9 +276,9 @@ follows. What survives is narrower and partly *strengthened*:
 - **Trust strengthens.** A JS plugin ecosystem means npm-resolved code
   executing at build time, per project. tsc-p's refusal becomes more
   distinctive, not less.
-- **Fidelity becomes the technical argument**, resting on upstream's own
-  metadata caveat — and it is testable the day the API lands rather than
-  assertable now.
+- **Fidelity is a formatting argument, not a documentation one.** Measured
+  above: comments survive a re-parse, blank lines and some type layout do not.
+  Worth stating precisely rather than overselling.
 - **Delivery is unchanged.** It remains an API; `tsc` gets no hook. Anyone
   wanting "run a compiler, get transformed output" still needs a wrapper.
 - **Performance stops being the declaration-side pitch.** Declaration ASTs are
