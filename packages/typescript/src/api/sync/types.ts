@@ -279,6 +279,11 @@ export interface InterfaceType extends TypeReference {
         (): readonly TypeParameter[];
         gen(): Generator<ProtocolRequest, readonly TypeParameter[], ProtocolResponse["result"]>;
     };
+    /** Get the synthetic `this` type of this interface/class */
+    getThisType: {
+        (): TypeParameter | undefined;
+        gen(): Generator<ProtocolRequest, TypeParameter | undefined, ProtocolResponse["result"]>;
+    };
 }
 
 /** Generic types */
@@ -545,11 +550,11 @@ export interface EmitOutput {
 export interface ImportSymbolAction {
     readonly kind: "importSymbol";
     readonly symbol: Symbol;
-    readonly isValidTypeOnlyUseSite?: boolean;
+    readonly isValidTypeOnlyUseSite?: boolean | undefined;
 }
 
 export type ImportAdderAction = ImportSymbolAction;
 
 export interface GetImportEditsForSymbolsOptions {
-    readonly isValidTypeOnlyUseSite?: boolean;
+    readonly isValidTypeOnlyUseSite?: boolean | undefined;
 }

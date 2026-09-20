@@ -200,6 +200,8 @@ export interface InterfaceType extends TypeReference {
     getOuterTypeParameters(): Promise<readonly TypeParameter[]>;
     /** Get local type parameters declared on this interface/class */
     getLocalTypeParameters(): Promise<readonly TypeParameter[]>;
+    /** Get the synthetic `this` type of this interface/class */
+    getThisType(): Promise<TypeParameter | undefined>;
 }
 
 /** Generic types */
@@ -421,11 +423,11 @@ export interface EmitOutput {
 export interface ImportSymbolAction {
     readonly kind: "importSymbol";
     readonly symbol: Symbol;
-    readonly isValidTypeOnlyUseSite?: boolean;
+    readonly isValidTypeOnlyUseSite?: boolean | undefined;
 }
 
 export type ImportAdderAction = ImportSymbolAction;
 
 export interface GetImportEditsForSymbolsOptions {
-    readonly isValidTypeOnlyUseSite?: boolean;
+    readonly isValidTypeOnlyUseSite?: boolean | undefined;
 }
