@@ -7,7 +7,7 @@
         "tag": null,
         "commit": "6d44e0584a857f3a03794241197fd9c7ff457499"
     },
-    "goVersion": "1.26",
+    "goVersion": "1.27",
     "platforms": [
         { "name": "darwin/arm64", "nodejsPlatform": "darwin", "nodejsArch": "arm64", "ghActionRunner": "macos-14" },
         { "name": "darwin/x64", "nodejsPlatform": "darwin", "nodejsArch": "x64", "ghActionRunner": "macos-15-intel" },

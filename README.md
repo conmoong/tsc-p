@@ -490,12 +490,12 @@ package whenever one exists.
 |---|---|
 | TypeScript version | 7.0.2 |
 | Upstream tag | none yet — tracking a commit on `microsoft/TypeScript`'s `main` (see [RELEASING.md](tsc-p/docs/RELEASING.md)'s versioning policy) |
-| Upstream commit | `2bd066d87f5bafd315be9f40889d0a60b9e58e0b` |
-| Go toolchain | 1.26 (from `tsc/go.mod`) |
+| Upstream commit | `6d44e0584a857f3a03794241197fd9c7ff457499` |
+| Go toolchain | 1.27 (from `tsc/go.mod`) |
 
 ## Building from source
 
-Requires Go 1.26 or later and Node 20.19 or later; end users of the npm
+Requires Go 1.27 or later and Node 20.19 or later; end users of the npm
 packages need neither.
 
 ```sh
