@@ -67,9 +67,14 @@ Module resolution is exposed too, via `getResolvedModule` and
 ```
 emit                 emitToString
 getJavaScriptEmit    getDeclarationEmit
-printNode
+printNode            printFile
 transpileModule      transpileDeclaration
 ```
+
+The distinction that governs everything below: **you can ask the API for emit;
+you cannot hook the API's emit.** Output can be requested, and a tree you built
+yourself can be printed, but nothing injects a transformer into the compiler's
+own emit pipeline.
 
 `getJavaScriptEmit` and `getDeclarationEmit` are **the same handler** with an
 `EmitOnly` discriminator, and both return:
@@ -200,8 +205,10 @@ published design:
 `compilerOptions.plugins` is not a route to any of this. In TS 5 it meant TS
 Server **language-service** plugins — editor-only, never affecting `tsc`
 output — and its successor is an architecture, not a config key: auxiliary
-language servers talking to TypeScript over IPC ([#63800](https://github.com/microsoft/TypeScript/issues/63800)).
-The field survives only as a type-check stub. Upstream's position on it is
+language servers talking to TypeScript over IPC ([#63800](https://github.com/microsoft/TypeScript/issues/63800)),
+now that the compiler serves LSP natively (`tsc --lsp`, `tsc/internal/lsp/`)
+rather than through tsserver's bespoke protocol. The field survives only as a
+type-check stub. Upstream's position on it is
 explicit, in response to [#63975](https://github.com/microsoft/TypeScript/issues/63975):
 *"We don't support plugins. We just ignore that entirely, let alone do any
 extending."*
@@ -317,6 +324,61 @@ integration is therefore declaration-only: tsc-p replaces the
 
 App developers on shapes 2 and 3 get nothing, and that is most bundler users by
 headcount.
+
+### tsc-p as an API server: plugins do not fire
+
+The binary accepts `--api` and `--lsp` like any upstream build, so
+`new API({ tsserverPath: ".../tsc-p" })` works and `tsc-p --lsp` serves an
+editor. Neither runs tsc-p's plugins, and it is worth knowing why before
+anyone builds on the idea.
+
+Measured — same binary, same tsconfig, same project:
+
+```
+plugins survived into parsed.options: false
+CLI  .d.ts contains a @bouncer-removed symbol: no
+API  .d.ts contains a @bouncer-removed symbol: YES
+```
+
+`createProgram(rootFiles, compilerOptions)` takes a **structured
+`CompilerOptions`**, and `plugins` is not one of its fields — it is raw
+tsconfig JSON that tsc-p reads separately. `parseJsonConfigFileContent` drops
+it in transit, so nothing reaches the activation path. Emit through the API is
+otherwise complete and correct; it is simply upstream's emit.
+
+The same holds for the language service, for a simpler reason: hover,
+completion and diagnostics never run emit, so emit plugins are invisible to
+them by construction. **As an API or LSP server, tsc-p is upstream plus dead
+weight.**
+
+Two consequences worth holding:
+
+- The line above is exact rather than rhetorical: the compiler must be
+  *invoked*, not *queried*. An API consumer is querying a server.
+- `parsed.options` does carry `configFilePath`, so tsc-p *could* re-read the
+  raw tsconfig and activate plugins in API mode. That is a decision, not a
+  blocker — and a costly one: a tool pointed at tsc-p would silently emit
+  differently from the same tool pointed at `tsc`, with nothing in the API
+  surface explaining why. If ever done it should be opt-in and loudly
+  reported.
+
+### The editor/build divergence, and the gap it exposes
+
+Because plugins are emit-only, the editor shows source truth while the build
+ships something else: a `@bouncer remove`d symbol still autocompletes, and a
+`paris` branch that will be eliminated still typechecks. For paris that is
+correct — you want the disabled branch checked. For bouncer there is a real
+hole, already named in its own documentation: removing or un-exporting a name
+that another file imports produces a clean editor, a clean typecheck, and a
+broken artifact.
+
+The fix belongs in the build, not the editor. `graph` already collects
+resolved edges *and the specific named bindings each import reaches for*, and
+already reports rule violations as ordinary build diagnostics — so
+cross-checking those against what bouncer removed fails the compile before a
+broken package can be produced. No editor integration, and no pre-commit hook:
+hooks are bypassable, skip CI by default, and would re-parse a program the
+compiler already has in memory.
 
 ## Portability roadmap
 
