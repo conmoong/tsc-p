@@ -38,6 +38,7 @@ func TestOptionsFromConfigLegacyName(t *testing.T) {
 	legacy := OptionsFromConfig(config(map[string]any{"name": LegacyPluginName, "extension": false}))
 	assert.Assert(t, legacy != nil, "the legacy plugin name no longer activates the plugin")
 	assert.Equal(t, legacy.Extension, false, "options on a legacy-named entry are not read")
+	assert.Equal(t, len(legacy.notices), 1, "the legacy name must carry a deprecation notice")
 
 	both := OptionsFromConfig(config(
 		map[string]any{"name": LegacyPluginName, "extension": false},
@@ -45,6 +46,7 @@ func TestOptionsFromConfigLegacyName(t *testing.T) {
 	))
 	assert.Assert(t, both != nil)
 	assert.Equal(t, both.Extension, true, "the legacy entry was preferred over the current name")
+	assert.Equal(t, len(both.notices), 0, "no deprecation notice when the current name is used")
 }
 
 func TestOptionsFromConfigAbsent(t *testing.T) {

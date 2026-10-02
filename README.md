@@ -31,10 +31,9 @@ emitted JavaScript and declarations so they refer to real emitted files:
   `.json` is kept as-is.
 
 > The plugin's former name, `@conmoong/path-rewrite`, is still accepted and
-> behaves identically, but it is never reported: `tsc` fails a build on any
-> emitted diagnostic regardless of category, so even a warning would break
-> builds that otherwise succeed. Rename the entry to `@conmoong/path`; the
-> old name will be removed at the next breaking release.
+> behaves identically, with a deprecation warning that does not fail the
+> build. Rename the entry to `@conmoong/path`; the old name will be removed
+> at the next breaking release.
 
 ```jsonc
 {
@@ -436,6 +435,10 @@ The plugin does exactly one of two things, chosen by `"emit"`:
   a later `@conmoong/graph-validate` run, `unused` requires a workspace
   view broader than any one project's own facts to be meaningful across
   `references`, so it only makes sense once, not deferred-then-repeated.
+
+Each check takes a severity: `"error"` reports the finding and fails the
+build, `"warning"` reports it without failing the build, and `"allow"`
+suppresses it.
 
 A `"module"` pattern uses tsconfig `"paths"`'s single-`*` wildcard syntax;
 `"./"`/`"../"`-prefixed patterns match project-relative files, anything

@@ -15,3 +15,9 @@ var Tscp_paris_0 = &Message{code: 990101, category: CategoryError, key: "Tscp_pa
 // Diagnostic.SetCategory — this message's own default category is only
 // the fallback for the rare construction path that doesn't override it.
 var Tscp_graph_0 = &Message{code: 990201, category: CategoryError, key: "Tscp_graph_0_990201", text: "@conmoong/graph: {0}"}
+
+// Tscp_path_0 carries diagnostics produced by the @conmoong/path emit
+// plugin — currently only the notice that a deprecated plugin name is in
+// use. Warning-category, so it is reported without failing the build (see
+// hasErrorDiagnostics in internal/execute/tsc).
+var Tscp_path_0 = &Message{code: 990301, category: CategoryWarning, key: "Tscp_path_0_990301", text: "@conmoong/path: {0}"}

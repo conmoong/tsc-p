@@ -113,11 +113,13 @@ docs are `merge=ours`, replaced wholesale, and never conflict.
 | `tsc/internal/compiler/emitter.go` | Two emit-plugin hook points (marked `tsc-p modification`) |
 | `tsc/internal/compiler/emitHost.go` | Forwards plugins from the compiler host, applies the tsconfig-configured defaults, and exposes a resolution-cache lookup for plugins (marked `tsc-p modification`) |
 | `tsc/internal/core/version.go` | Pins the reported compiler version to the stable release tsc-p tracks, instead of upstream's own dev/prerelease string |
+| `tsc/internal/execute/tsc/emit.go` | The exit status counts only error-category diagnostics, matching upstream's own error summary rather than counting every diagnostic. Upstream has no warning-category messages, so its behaviour is unchanged; tsc-p's plugins rely on it to report warnings (a `graph` rule at `"warning"`, a deprecated plugin name) without failing a build. Covers `tsc -b` too, which derives project status from the same result |
 | `tsc/internal/tsoptions/tsconfigparsing.go` | Inherits `compilerOptions.plugins` across `extends`. Upstream drops it, because `plugins` is the one declared option with no field on `core.CompilerOptions` and so is never merged. **Permanent:** reported upstream ([#63975](https://github.com/microsoft/TypeScript/issues/63975)) and declined — "We don't support plugins. We just ignore that entirely, let alone do any extending." tsc-p reads that array to activate its plugins, so it needs the fix regardless. |
 | `tsc/internal/tsoptions/tsconfigparsing_test.go` | Tests for the above |
 | `package.json` | Adds `tscp:*` scripts (build/package/test/publish, under `tsc-p/scripts/`); every existing script is untouched |
 | `.gitattributes` | `merge=ours` rules so the files tsc-p replaces wholesale (`README.md`, the identity docs below) and the `Herebyfile.mjs` release pin always keep this fork's version across an upstream merge instead of conflicting |
 | `Herebyfile.mjs` | Pins the native-preview release profile to tsc-p's tracked stable version instead of upstream's own prerelease/nightly profile |
+
 **Project-identity docs** — replaced wholesale, all `merge=ours`, so upstream's
 edits to them never reach us and never conflict:
 

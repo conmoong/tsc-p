@@ -38,12 +38,9 @@ const PluginName = "@conmoong/path"
 // LegacyPluginName is the plugin's previous name, still honoured so that an
 // existing tsconfig does not silently lose rewriting: unknown plugin names
 // are ignored by design, so dropping it outright would disable the plugin
-// with no error at all. Matched only when PluginName is absent.
-//
-// It is deliberately not reported. tsc's exit status counts emit
-// diagnostics without regard to category, so even a warning-category
-// notice exits 2 — a deprecation notice would turn every green build red.
-// Remove the alias at the next breaking release instead.
+// with no error at all. Matched only when PluginName is absent, and
+// reported as a warning, which does not fail the build. Remove it at the
+// next breaking release.
 const LegacyPluginName = "@conmoong/path-rewrite"
 
 // Options configures the host rewriter. Every rewrite produces a relative
@@ -69,6 +66,11 @@ type Options struct {
 	// the longest matched prefix wins. Unmatched specifiers fall back to
 	// aliasEnabled and the global extension setting.
 	aliasRules []aliasRule
+
+	// notices are one-off, file-independent warnings about the
+	// configuration itself (currently only a deprecated plugin name),
+	// reported once per program by the plugin's TakeDiagnostics.
+	notices []string
 }
 
 type aliasRule struct {
@@ -119,12 +121,15 @@ func ruleExtension(rule aliasRule, globalExtension bool) bool {
 // configuration does not enable the plugin.
 func OptionsFromConfig(raw any) *Options {
 	entry, ok := hooks.FindPluginEntry(raw, PluginName)
+	var notices []string
 	if !ok {
 		if entry, ok = hooks.FindPluginEntry(raw, LegacyPluginName); !ok {
 			return nil
 		}
+		notices = append(notices, `the plugin name "`+LegacyPluginName+`" is deprecated; rename it to "`+PluginName+`" in compilerOptions.plugins`)
 	}
 	options := defaultOptions()
+	options.notices = notices
 	if value, ok := hooks.ConfigGet(entry, "extension"); ok {
 		if b, ok := value.(bool); ok {
 			options.Extension = b

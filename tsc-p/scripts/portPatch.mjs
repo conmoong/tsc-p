@@ -67,6 +67,7 @@ const MODIFIED_UPSTREAM_FILES = [
     "tsc/internal/compiler/emitHost.go",
     "tsc/internal/compiler/emitter.go",
     "tsc/internal/core/version.go",
+    "tsc/internal/execute/tsc/emit.go",
     "tsc/internal/tsoptions/tsconfigparsing.go",
     "tsc/internal/tsoptions/tsconfigparsing_test.go",
 ];

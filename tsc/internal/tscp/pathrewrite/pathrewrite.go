@@ -25,10 +25,14 @@
 package pathrewrite
 
 import (
+	"sync"
+
 	"github.com/microsoft/TypeScript/tsc/internal/ast"
+	"github.com/microsoft/TypeScript/tsc/internal/diagnostics"
 	"github.com/microsoft/TypeScript/tsc/internal/printer"
 	"github.com/microsoft/TypeScript/tsc/internal/transformers"
 	"github.com/microsoft/TypeScript/tsc/internal/tscp/hooks"
+	"github.com/microsoft/TypeScript/tsc/internal/tspath"
 )
 
 // EmitKind identifies which emit pipeline a rewrite is running in.
@@ -113,9 +117,16 @@ func (Identity) RewriteModuleSpecifier(context RewriteContext, specifier string)
 type plugin struct {
 	factory      func(host printer.EmitHost) ModuleSpecifierRewriter
 	declarations bool
+
+	mu       sync.Mutex
+	notices  []string
+	reported bool
 }
 
-var _ hooks.EmitPlugin = (*plugin)(nil)
+var (
+	_ hooks.EmitPlugin              = (*plugin)(nil)
+	_ hooks.FileDiagnosticsProvider = (*plugin)(nil)
+)
 
 // NewPlugin wraps a fixed rewriter as an emit plugin that rewrites module
 // specifiers in both the script and declaration pipelines. The rewriter
@@ -144,7 +155,26 @@ func NewHostPlugin(options *Options) hooks.EmitPlugin {
 			return NewHostRewriter(host, options)
 		},
 		declarations: options.Declarations,
+		notices:      options.notices,
 	}
+}
+
+// TakeDiagnostics reports the configuration notices once per program, on
+// the first file drained; they belong to no file. Path rewriting itself
+// never produces diagnostics: an unresolvable specifier is left as written
+// and the compiler reports it.
+func (p *plugin) TakeDiagnostics(path tspath.Path) []*ast.Diagnostic {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.reported || len(p.notices) == 0 {
+		return nil
+	}
+	p.reported = true
+	result := make([]*ast.Diagnostic, 0, len(p.notices))
+	for _, notice := range p.notices {
+		result = append(result, ast.NewCompilerDiagnostic(diagnostics.Tscp_path_0, notice))
+	}
+	return result
 }
 
 func (p *plugin) Name() string {
