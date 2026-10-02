@@ -6,7 +6,8 @@ snapshot of an actively moving target — it separates **what is verifiable in
 the tree today** from **what is planned** from **what is inference**. Re-check
 before relying on any of it.
 
-*Last reviewed: 2026-09-20, against `upstream/main` @ `f29aeb9f82`.*
+*Last reviewed: 2026-10-03, against `upstream/main` @ `7e5d1c1c1d` — the
+7.1 beta-prep state, three days before the scheduled beta.*
 
 ## The thesis
 
@@ -31,6 +32,45 @@ For tsc-p this cuts both ways. Upstream will not ship a competing transformer
 story, because it is not their business — so the niche is safe from a rug pull.
 Equally, the forces pushing emit away from `tsc` have no counterweight from
 Microsoft, so the ground is stable and not growing.
+
+## Where 7.1 stands
+
+The release is taking the shape the thesis predicts.
+
+**Schedule.** The [iteration plan](https://github.com/microsoft/TypeScript/issues/63703)
+now targets Beta 2026-10-06, RC 2026-11-10 and Stable 2026-11-24. The beta
+milestone stood at 43% complete with 31 items open on beta-prep day, so a
+share of it will move to later milestones.
+
+**What the API cycle delivered is all consumption.** Checker methods requested
+by name for typescript-eslint; AST helpers added specifically for api-extractor
+([#64439](https://github.com/microsoft/TypeScript/pull/64439)); a Build
+Orchestrator replacing `SolutionBuilder`
+([#64158](https://github.com/microsoft/TypeScript/pull/64158)); module
+resolution overrides for Volar-style tools
+([#64299](https://github.com/microsoft/TypeScript/pull/64299), checking only);
+and LSP middleware that lets VS Code extensions filter and rewrite language
+feature responses ([#64583](https://github.com/microsoft/TypeScript/pull/64583),
+which closes [#63800](https://github.com/microsoft/TypeScript/issues/63800)).
+
+**Nothing moved on emit extensibility.** Section 3C of the roadmap reads word
+for word as it did in August, with nothing marked in progress; the emit read
+still returns text; `PrintNodeParams` has gained no metadata. The one open
+emit request on the beta milestone
+([#63843](https://github.com/microsoft/TypeScript/issues/63843)) asks to
+*capture* `.d.ts` output as text through a `writeFile` callback.
+
+**Plugins are acknowledged only to be reported.** `compilerOptions.plugins` is
+now parsed into `CompilerOptions.Plugins`, keeping each entry's `name` and
+nothing else, and the parser says why: *"Native TypeScript does not load
+plugins; retain them only so tools can report the incompatibility"*
+([#64397](https://github.com/microsoft/TypeScript/pull/64397)). That is the
+plainest statement of the position yet.
+
+**The API is still `unstable/`, and behaves like it.** Every export path
+carries the prefix two weeks before release, and signatures still break:
+`createSourceFile` now returns a `RetainedSourceFile` lease rather than the
+file itself. Anything built on the surface today is signing up for churn.
 
 ## What exists today (verified)
 
@@ -60,7 +100,24 @@ Three additions make the protocol viable for fine-grained consumers:
 
 Module resolution is exposed too, via `getResolvedModule` and
 `getResolvedModuleFromModuleSpecifier`, returning `resolvedFileName`,
-`extension`, `packageId` and `isExternalLibraryImport`.
+`extension`, `packageId` and `isExternalLibraryImport` — and can be overridden:
+`createModuleResolver` accepts static mappings and a resolution callback, which
+change what the compiler analyses but not what it emits.
+
+Two layers matter for build tools:
+
+- **The Build Orchestrator** — `createBuildOrchestrator(tsconfigPaths, options)`
+  with `build`, `buildReferences` and `clean` — is `tsc -b` behind the API. It
+  builds from **tsconfig paths**, writes output through the filesystem layer
+  rather than returning it over IPC, has watch disabled, and lets a caller
+  override only eight options (`incremental`, `declaration`, `declarationMap`,
+  `emitDeclarationOnly`, `sourceMap`, `inlineSourceMap`, `traceResolution`,
+  `assumeChangesOnlyAffectDirectDependencies`) — not `outDir`, `rootDir` or
+  `noCheck`.
+- **The filesystem layer** is per-operation: each of `readFile`, `writeFile`,
+  `fileExists`, `realpath` and the rest takes a callback or a sentinel
+  (`serverFS.useOS`, `noop`, `error`). A `writeFile` callback alone is enough
+  to receive a build's output in memory with nothing written to disk.
 
 ### Emit is exposed, as text
 
@@ -101,14 +158,17 @@ compiler. Everything *around* that read, however, is in place:
   `unstable/ast/factory`, `unstable/ast/visitor`, `unstable/ast/clone`. The
   factory belongs on the client by design: nodes are built in JS, encoded, and
   shipped, so it was never going to be a protocol method.
-- **`createSourceFile` / `createSourceFileFromFile`** parse text into an AST.
+- **`createSourceFile` / `createSourceFileFromFile`** parse text into an AST,
+  returned as a `RetainedSourceFile` lease: the tree is `.sourceFile`, and the
+  lease is disposed when the remote copy is no longer needed.
 
 The consequence is that a transformer can be assembled **today**, without
 upstream adding anything: `getDeclarationEmit` → `createSourceFile` on the
 returned text → visit and rebuild with the factory → `printFile`. What is
 missing is not the toolkit but the *direct* emit-AST read.
 
-**Measured, not assumed.** Round-tripping a JSDoc-heavy `.d.ts` through
+**Measured, not assumed** — and re-measured on the beta-prep tree with the
+same results. Round-tripping a JSDoc-heavy `.d.ts` through
 `createSourceFile` → `printFile`:
 
 - **Comments survive re-parse intact** — `@param`, `@returns`, `@throws`,
@@ -124,9 +184,11 @@ missing is not the toolkit but the *direct* emit-AST read.
 - **A transform currently corrupts the output.** `updateSourceFile` followed by
   `printFile` emits the file's leading comment block a second time, orphaned at
   end of file — with the *unchanged* statement array, so merely reconstructing
-  the file triggers it. Minimal repro: `createSourceFile("/** Doc. */\nexport
-  declare const a: number;\n")`, `updateSourceFile` with its own statements,
-  `printFile` → the doc comment is emitted twice.
+  the file triggers it, for `.ts` and `.d.ts` alike and for line comments as
+  well as JSDoc. Minimal repro: `createSourceFile("a.d.ts", "/** Doc. */\nexport
+  declare const a: number;\n").sourceFile`, `updateSourceFile` with its own
+  statements, `printFile` → the doc comment is emitted twice. Still present at
+  beta prep, and not yet reported upstream.
 
 That last one is a bug and will be fixed; it is not an architectural limit and
 should not be leaned on. The durable difference is narrower: **tsc-p transforms
@@ -181,6 +243,9 @@ describes custom transformers as:
 >
 > *Needed by: Angular, Google, ts-loader — Cost: 2 dev-weeks (less for MVP)*
 
+That text, the estimate, and its status — nothing marked in progress — are
+unchanged on beta-prep day.
+
 The round trip decomposes into three parts, only one of which is missing:
 
 | Step | Status |
@@ -204,14 +269,15 @@ published design:
 
 `compilerOptions.plugins` is not a route to any of this. In TS 5 it meant TS
 Server **language-service** plugins — editor-only, never affecting `tsc`
-output — and its successor is an architecture, not a config key: auxiliary
-language servers talking to TypeScript over IPC ([#63800](https://github.com/microsoft/TypeScript/issues/63800)),
-now that the compiler serves LSP natively (`tsc --lsp`, `tsc/internal/lsp/`)
-rather than through tsserver's bespoke protocol. The field survives only as a
-type-check stub. Upstream's position on it is
-explicit, in response to [#63975](https://github.com/microsoft/TypeScript/issues/63975):
-*"We don't support plugins. We just ignore that entirely, let alone do any
-extending."*
+output — and its successor is an architecture, not a config key: VS Code
+extensions installing middleware on the native language server's responses
+([#64583](https://github.com/microsoft/TypeScript/pull/64583)), now that the
+compiler serves LSP itself (`tsc --lsp`) rather than through tsserver's bespoke
+protocol. The field is parsed into `CompilerOptions.Plugins` — names only,
+merged across `extends` like any other option — so that tools can tell users
+their plugins will not run. Upstream's position, in response to
+[#63975](https://github.com/microsoft/TypeScript/issues/63975): *"We don't
+support plugins. We just ignore that entirely, let alone do any extending."*
 
 ## The build shapes
 
@@ -268,7 +334,9 @@ third-party code — the property `runExternalCode` exists to gate.
 adoption. They post-process declaration *text*: fragile, type-unaware, a
 separate step — and good enough for most teams, with years of adoption. Correct
 because it is inside the compiler is an argument against tools that already
-work.
+work. api-extractor in particular is being ported to the 7.1 API with
+upstream's direct help — #64439 added AST helpers for it by name — so the
+incumbent for release-tag declaration trimming will have a TypeScript 7 path.
 
 **Declaration bundling** (rollup-plugin-dts, rolldown-plugin-dts) inlines
 internal imports, so alias specifiers disappear rather than needing rewriting.
@@ -319,48 +387,61 @@ It degrades whenever tsc-p is one stage in someone else's pipeline: a
 downstream bundler resolves aliases, inlines declarations, and re-emits, so
 anything tsc-p *rewrites* gets redone. Only what it *subtracts* survives — a
 useful filter for evaluating plugin ideas. For bundler users the coherent
-integration is therefore declaration-only: tsc-p replaces the
-`tsc --emitDeclarationOnly` step and the bundler keeps JavaScript.
+integration is therefore declaration-only: tsc-p produces the declarations and
+the bundler keeps JavaScript. That no longer requires a subprocess and a
+scratch directory — a bundler plugin can drive tsc-p through upstream's own
+build API and receive transformed declarations in memory (next section).
 
 App developers on shapes 2 and 3 get nothing, and that is most bundler users by
 headcount.
 
-### tsc-p as an API server: plugins do not fire
+### tsc-p as an API server: builds yes, programs no
 
 The binary accepts `--api` and `--lsp` like any upstream build, so
 `new API({ tsserverPath: ".../tsc-p" })` works and `tsc-p --lsp` serves an
-editor. Neither runs tsc-p's plugins, and it is worth knowing why before
-anyone builds on the idea.
+editor. Whether tsc-p's plugins apply depends entirely on the route.
 
-Measured — same binary, same tsconfig, same project:
+Measured on the beta-prep tree — same binary, same tsconfig, a
+`@bouncer remove`d export:
 
+| Route | Plugin applied? |
+|---|---|
+| CLI (`tsc-p -p tsconfig.json`) | yes |
+| API Build Orchestrator (`createBuildOrchestrator([tsconfigPath]).build()`) | **yes** |
+| API `createProgram(rootFiles, compilerOptions)` → `emitToString` | no |
+| Language service | no — it never emits |
+
+tsc-p's plugins read their configuration — names *and* options such as
+`alias`, `define` and `rules` — from the raw tsconfig. Every route that starts
+from a tsconfig **path** carries it; `createProgram` receives only a structured
+`CompilerOptions`, whose `Plugins` field keeps names and nothing else.
+
+**The orchestrator route is a real integration channel.** With a `writeFile`
+callback on the filesystem layer, a build through tsc-p hands back the
+transformed `.js` and `.d.ts` in memory and writes nothing to disk:
+
+```js
+const api = new API({ tsserverPath: tscpBinary, cwd, fs: {
+  writeFile: (path, content) => outputs.set(path, content),
+  readFile: serverFS.useOS, fileExists: serverFS.useOS, /* …the rest useOS */
+}});
+api.createBuildOrchestrator([tsconfigPath], { cwd }).build();
 ```
-plugins survived into parsed.options: false
-CLI  .d.ts contains a @bouncer-removed symbol: no
-API  .d.ts contains a @bouncer-removed symbol: YES
-```
 
-`createProgram(rootFiles, compilerOptions)` takes a **structured
-`CompilerOptions`**, and `plugins` is not one of its fields — it is raw
-tsconfig JSON that tsc-p reads separately. `parseJsonConfigFileContent` drops
-it in transit, so nothing reaches the activation path. Emit through the API is
-otherwise complete and correct; it is simply upstream's emit.
+That is the declaration step a bundler plugin needs, through upstream's own
+API: no subprocess, no scratch directory, no reimplementation. Whether a given
+tool benefits depends on which API it adopts — a declaration plugin ported to
+`createProgram`/`emitToString` gets upstream's emit; one ported to the
+orchestrator gets tsc-p's.
 
-The same holds for the language service, for a simpler reason: hover,
-completion and diagnostics never run emit, so emit plugins are invisible to
-them by construction. **As an API or LSP server, tsc-p is upstream plus dead
-weight.**
-
-Two consequences worth holding:
-
-- The line above is exact rather than rhetorical: the compiler must be
-  *invoked*, not *queried*. An API consumer is querying a server.
-- `parsed.options` does carry `configFilePath`, so tsc-p *could* re-read the
-  raw tsconfig and activate plugins in API mode. That is a decision, not a
-  blocker — and a costly one: a tool pointed at tsc-p would silently emit
-  differently from the same tool pointed at `tsc`, with nothing in the API
-  surface explaining why. If ever done it should be opt-in and loudly
-  reported.
+**The `createProgram` route is a decision, not a blocker.** `parsed.options`
+now carries `plugins` (names) and `configFilePath`, so tsc-p could activate
+plugins there too: by name with default options, or by re-reading the raw
+tsconfig. The surprise objection is weaker than it looks — the plugin list sits
+in the very options object the caller handed over — but option-less activation
+only suits plugins whose defaults are useful (`bouncer`, `path`, `pure`), not
+`paris` or `graph`, and re-reading a file the caller did not pass is a side
+channel. Not done; worth revisiting only if a real tool needs it.
 
 ### The editor/build divergence, and the gap it exposes
 
@@ -379,6 +460,12 @@ cross-checking those against what bouncer removed fails the compile before a
 broken package can be produced. No editor integration, and no pre-commit hook:
 hooks are bypassable, skip CI by default, and would re-parse a program the
 compiler already has in memory.
+
+The editor side now has an optional complement. LSP middleware
+([#64583](https://github.com/microsoft/TypeScript/pull/64583)) lets a VS Code
+extension filter and rewrite completion and hover responses, so a small
+extension could mark `@bouncer remove`d symbols where they are offered. That
+improves feedback; the build-side check is still what guarantees the artifact.
 
 ## Portability roadmap
 
@@ -419,7 +506,8 @@ Ordered:
 4. **`bouncer` × TSDoc interop.** `@bouncer release public|beta|internal`
    already parallels TSDoc's `@public`/`@beta`/`@internal` and api-extractor's
    trimmed rollups. Interoperating widens bouncer *within* the market where it
-   is correct.
+   is correct — and api-extractor's TypeScript 7 port makes it the comparison
+   every evaluator will run.
 
 **Not bouncer as a bundler plugin.** A bundler plugin sees JS only; if it
 strips an export while `.d.ts` comes from a separate `tsc` or oxc pass, the two
@@ -430,17 +518,25 @@ behind it at runtime. Bouncer is only correct where one tool owns both outputs.
 
 | Signal | Why it matters |
 |---|---|
-| `EmitOutputFile` gaining a node handle instead of `Text string` | **The single earliest indicator.** The round trip is blocked on this one change, and it is kind-agnostic — a one-line diff in `tsc/internal/api/proto.go` |
-| `unstable/ast` losing its `unstable` prefix | The transformer toolkit becoming a supported surface rather than an experiment |
+| `EmitOutputFile` gaining a node handle instead of `Text string` | **The single earliest indicator.** The round trip is blocked on this one change, and it is kind-agnostic — a one-line diff in `tsc/internal/api/proto.go`. Still `Text` at beta prep |
+| Whether 7.1 ships its API without the `unstable/` prefix | "Stabilize API" is a 7.1 work item, yet every path is still `unstable/` days before beta. If it ships prefixed, the transformer toolkit stays an experiment for another cycle |
+| Which API bundler declaration plugins adopt | The Build Orchestrator carries tsc-p's plugins; `createProgram`/`emitToString` does not. That choice, made by others, decides whether tsc-p reaches bundler users |
+| Tools reporting `compilerOptions.plugins` as unsupported | The stated purpose of parsing it. A tool that warns generically would flag every tsc-p config — worth knowing before users ask why |
 | `printNode` gaining emit-node metadata fields | Upstream solving the fidelity problem, which is the fallback technical argument |
 | Any `declarationMap` story for client-transformed ASTs | The remaining design blocker |
 | ttsc shipping a declaration plugin hook | More likely, and sooner, than upstream shipping the round trip |
 | `isolatedDeclarations` adoption, and oxc-generated `.d.ts` in defaults | Removes the compiler from the pipeline entirely — the one pressure with no counterweight |
 | `runExternalCode` broadening beyond content mappers | A general in-compilation plugin host |
+| The upstream Wasm build ([#63813](https://github.com/microsoft/TypeScript/issues/63813), committed for 7.1) | Overlaps tsc-p's WASI target; an upstream-maintained build would carry fixes tsc-p currently works around |
+| A fix for the `updateSourceFile` comment duplication | Until it lands, no client-side declaration transform produces clean output |
 
 Related: [#63703](https://github.com/microsoft/TypeScript/issues/63703) (7.1
-iteration plan — 7.1 Beta 2026-09-09, RC 2026-10-20, Stable 2026-11-10, with
+iteration plan — Beta 2026-10-06, RC 2026-11-10, Stable 2026-11-24, with
 "Stabilize API" a work item),
+[#64397](https://github.com/microsoft/TypeScript/pull/64397) (plugins parsed,
+names only, "so tools can report the incompatibility"),
+[#64158](https://github.com/microsoft/TypeScript/pull/64158) (Build
+Orchestrator),
 [#63676](https://github.com/microsoft/TypeScript/issues/63676) (design notes
 covering the emit API and content mappers),
 [#516](https://github.com/microsoft/typescript-go/issues/516) (the original

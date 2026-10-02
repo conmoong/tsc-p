@@ -1175,12 +1175,12 @@ func parseConfig(
 					result.compileOnSave = compileOnSave
 				}
 			}
-			// tsc-p modification: compilerOptions.plugins has no field on
-			// core.CompilerOptions -- it is carried purely as raw JSON -- so
-			// mergeCompilerOptions below never brings it across `extends` the way
-			// it does typed options. Collect it here so a plugins array declared
-			// only in a base config stays visible to consumers reading
-			// ParsedCommandLine.Raw.
+			// tsc-p modification: the typed options merge below carries at most
+			// plugin *names* across `extends` (core.CompilerOptions keeps nothing
+			// else of a plugins entry), and never the raw entries. tsc-p's plugins
+			// read their names and options -- alias, define, rules -- from
+			// ParsedCommandLine.Raw, so collect the array here so a plugins array
+			// declared only in a base config stays visible there.
 			//
 			// Permanent, not pending upstream: reported as
 			// microsoft/TypeScript#63975 and declined --
