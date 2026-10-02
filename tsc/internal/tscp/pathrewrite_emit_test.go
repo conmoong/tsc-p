@@ -194,6 +194,36 @@ func TestPathRewriteDeclarationAliases(t *testing.T) {
 	assert.Assert(t, !strings.Contains(dts, `"@lib/`) && !strings.Contains(dts, `"@g"`), "an alias leaked into the declaration output:\n%s", dts)
 }
 
+// TestPathRewriteLeavesUnresolvedSpecifierUntouched pins that a specifier
+// the compiler genuinely failed to resolve is never rewritten. Under
+// nodenext a dynamic import() resolves in ESM mode even inside a CommonJS
+// file, and ESM resolution does not probe extensions, so an extensionless
+// alias is unresolvable there (TS2307 — suppressed below so the fixture
+// compiles). The fallback tiers must not rescue it with a CommonJS-mode
+// retry: that would probe extensions, find the file, and emit a rewrite
+// the compiler itself rejects.
+func TestPathRewriteLeavesUnresolvedSpecifierUntouched(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{}
+	for name, text := range aliasFixtureFiles {
+		files[name] = text
+	}
+	files["/src/index.ts"] = `import { alpha } from "@lib/alpha";
+export const value: number = alpha;
+export function loadAlpha() {
+    // @ts-ignore -- extensionless alias, unresolvable in import()'s ESM mode
+    return import("@lib/alpha");
+}
+`
+
+	outputs := emitAliasProject(t, files, aliasOptions(core.ModuleKindNodeNext), hostPlugins)
+	js := outputs["/out/index.js"]
+
+	assert.Assert(t, strings.Contains(js, `require("./lib/alpha.js")`), "resolvable static import must still be rewritten:\n%s", js)
+	assert.Assert(t, strings.Contains(js, `import("@lib/alpha")`), "a specifier the compiler failed to resolve was rewritten:\n%s", js)
+}
+
 // TestPathRewriteJsxRuntimeImport verifies that the automatic JSX runtime
 // import synthesised from a relative jsxImportSource is rewritten. This
 // specifier is never walked by the file loader (there is no explicit

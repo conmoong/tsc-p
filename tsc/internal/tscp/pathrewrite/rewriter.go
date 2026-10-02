@@ -172,6 +172,19 @@ func resolveSpecifier(resolver moduleResolver, sourceFile *ast.SourceFile, speci
 	var resolved *module.ResolvedModule
 	if hasUsableParentChain(specifierNode) {
 		resolved = resolver.GetResolvedModuleFromModuleSpecifier(sourceFile, specifierNode)
+		// A non-nil but unresolved entry means the program looked up this
+		// exact usage, in its exact resolution mode, and failed — the same
+		// failure it reports as TS2307. That answer is authoritative. The
+		// fallbacks below exist for specifiers with *no* entry (synthesised
+		// nodes, or ones the loader never walked); letting them run here
+		// would probe other modes and rewrite a specifier the compiler
+		// rejects. Concretely: under nodenext a dynamic import() resolves in
+		// ESM mode even inside a CommonJS file, so an extensionless alias is
+		// unresolvable there — yet a CommonJS-mode retry, which probes
+		// extensions, would find it.
+		if resolved != nil && !resolved.IsResolved() {
+			return resolved
+		}
 	}
 	if !resolved.IsResolved() {
 		if textMode, ok := resolver.(textModeResolver); ok {
