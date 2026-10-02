@@ -131,14 +131,21 @@ jobs:
           # so without a separate credential this push fails on most syncs.
           # TSCP_SYNC_TOKEN, when set, is a PAT scoped to this repo with Contents
           # and Workflows write; see tsc-p/docs/UPSTREAM-SYNC.md.
+          # actions/checkout persists GITHUB_TOKEN as an http.extraheader for
+          # github.com, which overrides credentials embedded in a remote URL --
+          # so the PAT must be paired with clearing that header, or the push
+          # still authenticates as the github-actions App. `-c key=` (empty)
+          # resets the header list and takes precedence wherever checkout put it.
           remote=origin
+          push_auth=()
           if [ -n "$SYNC_TOKEN" ]; then
             remote="https://x-access-token:$SYNC_TOKEN@github.com/${{ github.repository }}"
+            push_auth=(-c "http.https://github.com/.extraheader=")
           elif ! git diff --quiet "$(git merge-base HEAD origin/dev)" HEAD -- .github/workflows/; then
             echo "::warning::Upstream changed .github/workflows/ and TSCP_SYNC_TOKEN is not set, so the sync branch cannot be pushed. The tree above is verified green; merge it locally with: git fetch upstream && git merge upstream/main"
             exit 0
           fi
-          git push --force "$remote" nightly-canary:sync/upstream-main
+          git "${push_auth[@]}" push --force "$remote" nightly-canary:sync/upstream-main
           if gh pr list --head sync/upstream-main --base dev --state open --json number --jq '.[0].number' | grep -q .; then
             echo "sync PR already open; branch updated in place"
             exit 0

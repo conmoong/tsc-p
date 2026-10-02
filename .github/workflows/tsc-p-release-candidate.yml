@@ -130,7 +130,10 @@ jobs:
           # Contents + Workflows write) is what makes this push possible; without
           # it the candidate can only be regenerated locally via tscp:port.
           if [ -n "$SYNC_TOKEN" ]; then
-            git push --force "https://x-access-token:$SYNC_TOKEN@github.com/${{ github.repository }}" release-candidate
+            # Clear checkout's persisted GITHUB_TOKEN header, which would
+            # otherwise override the PAT in the URL (see tsc-p-nightly.yml).
+            git -c "http.https://github.com/.extraheader=" push --force \
+              "https://x-access-token:$SYNC_TOKEN@github.com/${{ github.repository }}" release-candidate
           else
             git push --force origin release-candidate
           fi
