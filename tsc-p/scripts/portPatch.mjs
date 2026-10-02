@@ -52,11 +52,25 @@ const LANE_EXCLUDES = {
 };
 
 // Every upstream file tsc-p modifies. Keep in sync with AGENTS.md's table.
+// Files tsc-p replaces wholesale rather than patches: the fork readme and the
+// project-identity docs. None of upstream's text survives in them, so they are
+// taken verbatim from the source branch, exactly like an added file, instead of
+// being diffed against upstream main and applied onto the target lane. Diffing
+// them is meaningless, and conflicts whenever upstream's own copy differs
+// between lanes — as it does as soon as upstream edits one of them on main.
+const WHOLESALE_FILES = [
+    "README.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+];
+
 const MODIFIED_UPSTREAM_FILES = [
     ".gitattributes",
-    // Project-identity docs, replaced wholesale rather than patched. All are
-    // merge=ours, so they never conflict on an upstream merge. NOTICE.txt and
-    // LICENSE.txt are deliberately absent: Apache-2.0 requires them intact.
+    // Project-identity docs (see WHOLESALE_FILES), all merge=ours, so they
+    // never conflict on an upstream merge either. NOTICE.txt and LICENSE.txt
+    // are deliberately absent: Apache-2.0 requires them intact.
     "CODE_OF_CONDUCT.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
@@ -153,7 +167,9 @@ const excluded = new Set([
     ...(LANE_EXCLUDES[laneName] ?? []),
     ...(arg("--exclude", "").split(",").filter(Boolean)),
 ]);
-const toApply = MODIFIED_UPSTREAM_FILES.filter(f => !excluded.has(f));
+const wholesale = new Set(WHOLESALE_FILES);
+const toApply = MODIFIED_UPSTREAM_FILES.filter(f => !excluded.has(f) && !wholesale.has(f));
+const toCopy = WHOLESALE_FILES.filter(f => !excluded.has(f));
 
 console.log(`patch: ${added.length} added file(s), ${modified.length} modified upstream file(s)`);
 if (excluded.size > 0) {
@@ -193,6 +209,11 @@ if (added.length > 0) {
     for (let i = 0; i < added.length; i += 200) {
         run("git", ["checkout", from, "--", ...added.slice(i, i + 200)], { cwd: repoRoot });
     }
+}
+
+// Wholesale-replaced files: verbatim, never diffed (see WHOLESALE_FILES).
+if (toCopy.length > 0) {
+    run("git", ["checkout", from, "--", ...toCopy], { cwd: repoRoot });
 }
 
 // The modified files are the real work. --3way lets git fall back to a proper
