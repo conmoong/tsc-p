@@ -20,7 +20,7 @@ first-party plugins transform the AST during emit, without depending on
 
 ## Path rewriting
 
-The path-rewrite plugin is enabled per project through a ts-patch-style
+The path plugin is enabled per project through a ts-patch-style
 entry in `compilerOptions.plugins`. It rewrites module specifiers in
 emitted JavaScript and declarations so they refer to real emitted files:
 
@@ -30,12 +30,18 @@ emitted JavaScript and declarations so they refer to real emitted files:
   `.d.ts` become `.js`, `.mts` becomes `.mjs`, `.cts` becomes `.cjs`, and
   `.json` is kept as-is.
 
+> The plugin's former name, `@conmoong/path-rewrite`, is still accepted and
+> behaves identically, but it is never reported: `tsc` fails a build on any
+> emitted diagnostic regardless of category, so even a warning would break
+> builds that otherwise succeed. Rename the entry to `@conmoong/path`; the
+> old name will be removed at the next breaking release.
+
 ```jsonc
 {
     "compilerOptions": {
         "plugins": [
             {
-                "name": "@conmoong/path-rewrite",
+                "name": "@conmoong/path",
 
                 // Global default: do rewritten specifiers carry the
                 // destination-derived extension? (.json is always kept)

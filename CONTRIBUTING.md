@@ -19,7 +19,7 @@ performance, watch mode. Report and fix those at
 benefits, and tsc-p inherits the fix automatically at the next upstream sync.
 
 **Here** — the emit-plugin hook, the plugins tsc-p ships
-(`@conmoong/path-rewrite`, `@conmoong/bouncer`, `@conmoong/paris`,
+(`@conmoong/path`, `@conmoong/bouncer`, `@conmoong/paris`,
 `@conmoong/pure`, `@conmoong/graph`), the `@conmoong/*` npm packages, the
 launcher, the WASI fallback, and the build/release tooling under `tsc-p/`.
 

@@ -17,7 +17,7 @@ tsconfig's compilerOptions.plugins; with nothing configured — the
 default — compiler behaviour is unchanged from upstream, byte for byte.
 Not affiliated with or endorsed by Microsoft.
 
-- **pathrewrite** (`@conmoong/path-rewrite`): rewrites tsconfig `paths`/
+- **pathrewrite** (`@conmoong/path`): rewrites tsconfig `paths`/
   package.json `imports` aliases and relative imports to real relative
   paths with destination-derived extensions (`.ts`→`.js`, `.mts`→`.mjs`,
   `.cts`→`.cjs`, `.json` kept).

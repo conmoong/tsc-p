@@ -20,6 +20,33 @@ func pluginEntry(fields map[string]any) any {
 	}
 }
 
+// TestOptionsFromConfigLegacyName pins the deprecated alias: an existing
+// tsconfig naming the plugin by its old name must keep rewriting rather than
+// silently losing the plugin (unknown names are ignored by design). The new
+// name wins when both are present, so an entry is never applied twice.
+func TestOptionsFromConfigLegacyName(t *testing.T) {
+	t.Parallel()
+
+	config := func(entries ...map[string]any) any {
+		plugins := make([]any, len(entries))
+		for i, entry := range entries {
+			plugins[i] = entry
+		}
+		return map[string]any{"compilerOptions": map[string]any{"plugins": plugins}}
+	}
+
+	legacy := OptionsFromConfig(config(map[string]any{"name": LegacyPluginName, "extension": false}))
+	assert.Assert(t, legacy != nil, "the legacy plugin name no longer activates the plugin")
+	assert.Equal(t, legacy.Extension, false, "options on a legacy-named entry are not read")
+
+	both := OptionsFromConfig(config(
+		map[string]any{"name": LegacyPluginName, "extension": false},
+		map[string]any{"name": PluginName, "extension": true},
+	))
+	assert.Assert(t, both != nil)
+	assert.Equal(t, both.Extension, true, "the legacy entry was preferred over the current name")
+}
+
 func TestOptionsFromConfigAbsent(t *testing.T) {
 	t.Parallel()
 

@@ -121,7 +121,7 @@ for (const goTarget of manifest.currentPlatform.nativeGoTargets) {
         }
         assert.ok(failed, "expected the broken fixture to fail");
 
-        // 7. Path rewriting: with an "@conmoong/path-rewrite" entry in
+        // 7. Path rewriting: with an "@conmoong/path" entry in
         // compilerOptions.plugins, tsconfig path aliases are rewritten to
         // relative paths with extensions derived from the resolved file
         // (.ts -> .js, .mts -> .mjs, .cts -> .cjs, .json kept), and the
@@ -151,7 +151,7 @@ for (const goTarget of manifest.currentPlatform.nativeGoTargets) {
                 strict: true,
                 resolveJsonModule: true,
                 plugins: [
-                    { name: "@conmoong/path-rewrite" },
+                    { name: "@conmoong/path" },
                 ],
                 paths: {
                     "@lib/*": ["./src/lib/*"],
@@ -199,7 +199,7 @@ for (const goTarget of manifest.currentPlatform.nativeGoTargets) {
         assert.ok(rewrittenDts.includes(`import("./lib/gamma.mjs")`), `declaration import type not rewritten:\n${rewrittenDts}`);
 
         const rewriteOutput = runCapture(process.execPath, [path.join(rewriteProject, "dist", "index.js")], { cwd: rewriteProject }).trim();
-        console.log(`path-rewrite: node dist/index.js -> ${rewriteOutput}`);
+        console.log(`path: node dist/index.js -> ${rewriteOutput}`);
         assert.equal(rewriteOutput, "total=100", "rewritten output did not run correctly");
 
         // 8. Bouncer: with an "@conmoong/bouncer" entry in

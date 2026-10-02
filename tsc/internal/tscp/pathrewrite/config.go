@@ -12,7 +12,7 @@ import (
 //	    "compilerOptions": {
 //	        "plugins": [
 //	            {
-//	                "name": "@conmoong/path-rewrite",
+//	                "name": "@conmoong/path",
 //	                "extension": true,
 //	                "declarations": true,
 //	                "alias": {
@@ -33,7 +33,18 @@ import (
 // list; entries with other names are ignored here, and this entry is
 // ignored by the language service. Nothing is ever loaded dynamically: the
 // name only selects this compiled-in plugin.
-const PluginName = "@conmoong/path-rewrite"
+const PluginName = "@conmoong/path"
+
+// LegacyPluginName is the plugin's previous name, still honoured so that an
+// existing tsconfig does not silently lose rewriting: unknown plugin names
+// are ignored by design, so dropping it outright would disable the plugin
+// with no error at all. Matched only when PluginName is absent.
+//
+// It is deliberately not reported. tsc's exit status counts emit
+// diagnostics without regard to category, so even a warning-category
+// notice exits 2 — a deprecation notice would turn every green build red.
+// Remove the alias at the next breaking release instead.
+const LegacyPluginName = "@conmoong/path-rewrite"
 
 // Options configures the host rewriter. Every rewrite produces a relative
 // path to the resolved file; the extension settings decide whether that
@@ -109,7 +120,9 @@ func ruleExtension(rule aliasRule, globalExtension bool) bool {
 func OptionsFromConfig(raw any) *Options {
 	entry, ok := hooks.FindPluginEntry(raw, PluginName)
 	if !ok {
-		return nil
+		if entry, ok = hooks.FindPluginEntry(raw, LegacyPluginName); !ok {
+			return nil
+		}
 	}
 	options := defaultOptions()
 	if value, ok := hooks.ConfigGet(entry, "extension"); ok {

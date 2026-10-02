@@ -18,7 +18,7 @@ A quick way to tell: run the same project through the matching upstream
 release. If it reproduces there, it is upstream's.
 
 **Is it about tsc-p?** Anything involving `compilerOptions.plugins` and the
-plugins tsc-p adds (`@conmoong/path-rewrite`, `@conmoong/bouncer`,
+plugins tsc-p adds (`@conmoong/path`, `@conmoong/bouncer`,
 `@conmoong/paris`, `@conmoong/pure`, `@conmoong/graph`), the `@conmoong/*` npm
 packages, the launcher, or the WASI fallback belongs
 [here](https://github.com/conmoong/tsc-p/issues).
