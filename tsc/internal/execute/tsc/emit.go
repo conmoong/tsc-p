@@ -62,9 +62,10 @@ func EmitAndReportStatistics(input EmitInput) (CompileAndEmitResult, *Statistics
 		statistics.Report(input.Writer, input.Testing)
 	}
 
-	if result.EmitResult.EmitSkipped && len(result.Diagnostics) > 0 {
+	// tsc-p: see hasErrorDiagnostics.
+	if result.EmitResult.EmitSkipped && hasErrorDiagnostics(result.Diagnostics) {
 		result.Status = ExitStatusDiagnosticsPresent_OutputsSkipped
-	} else if len(result.Diagnostics) > 0 {
+	} else if hasErrorDiagnostics(result.Diagnostics) {
 		result.Status = ExitStatusDiagnosticsPresent_OutputsGenerated
 	}
 	return result, statistics
@@ -149,4 +150,22 @@ func listFiles(input EmitInput, emitResult *compiler.EmitResult) {
 			fmt.Fprintln(input.Writer, file.FileName())
 		}
 	}
+}
+
+// hasErrorDiagnostics reports whether any diagnostic is error-category.
+//
+// tsc-p addition. Upstream decides the exit status by counting every
+// diagnostic, while its own error summary ("Found N errors") counts only
+// error-category ones; this makes the exit status agree with the summary.
+// No upstream message is warning-category, so upstream behaviour is
+// unchanged. It exists so tsc-p's emit plugins can report warnings — a
+// graph rule at "warning" severity, a deprecated plugin name — without
+// failing a build that otherwise succeeds.
+func hasErrorDiagnostics(diags []*ast.Diagnostic) bool {
+	for _, d := range diags {
+		if d.Category() == diagnostics.CategoryError {
+			return true
+		}
+	}
+	return false
 }

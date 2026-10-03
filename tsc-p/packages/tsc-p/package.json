@@ -1,0 +1,36 @@
+{
+    "name": "@conmoong/tsc-p",
+    "private": true,
+    "description": "Native TypeScript compiler with a compiled-in emit-plugin hook. Unofficial downstream fork of microsoft/TypeScript's tsc/ native compiler; not endorsed by Microsoft.",
+    "keywords": [
+        "typescript",
+        "compiler",
+        "native",
+        "tsc"
+    ],
+    "homepage": "https://github.com/conmoong/tsc-p",
+    "bugs": {
+        "url": "https://github.com/conmoong/tsc-p/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/conmoong/tsc-p.git"
+    },
+    "license": "Apache-2.0",
+    "type": "module",
+    "bin": {
+        "tsc-p": "./bin/tsc-p"
+    },
+    "files": [
+        "bin",
+        "lib",
+        "NOTICE.txt"
+    ],
+    "exports": {
+        "./package.json": "./package.json"
+    },
+    "preferUnplugged": true,
+    "engines": {
+        "node": ">=20.19"
+    }
+}
